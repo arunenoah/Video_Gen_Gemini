@@ -272,6 +272,22 @@ WRITER_SYSTEM = (
 )
 
 
+RESTRUCTURE_SYSTEM = (
+    "You are a video script editor. The user gives you a video prompt or scene description "
+    "that is NOT yet split into clips. Split it into 2-6 clips (or the requested number), "
+    "each animatable in 4-8 seconds. STRICT FORMAT for every clip:\n\n"
+    "Clip {n} — {Short Title}\n"
+    "{1-3 sentences of visual action from the user's text, present tense}\n"
+    "Dialogue:\n"
+    "{Speaker}: \"{line}\"\n\n"
+    "Rules: PRESERVE the user's content — characters, style descriptions, lighting, camera moves "
+    "and dialogue. Distribute the existing dialogue across clips in original order; never invent "
+    "new plot or new lines. Speaker names plain (no parenthetical tones), 15 characters or less; "
+    "max 4 dialogue lines per clip; blank line between clips; "
+    "output ONLY the script — no commentary, no markdown headers."
+)
+
+
 def _haiku(api_key: str, system: str, content: list) -> str:
     """One Claude Haiku call. content = Anthropic messages content blocks."""
     body = json.dumps({
@@ -375,6 +391,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._story_resume()
         if self.path == "/api/write-story":
             return self._write_story()
+        if self.path == "/api/restructure":
+            return self._restructure()
         if self.path == "/api/stitch":
             return self._stitch()
         self.send_error(404)
@@ -558,6 +576,31 @@ class Handler(SimpleHTTPRequestHandler):
         }
         (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
         self._json(200, {"script": script, "id": gid})
+
+    def _restructure(self):
+        """Split a headerless prompt/script into Clip-N format via Claude Haiku (content preserved)."""
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+        text = str(payload.get("script", "")).strip()
+        if not text or len(text) > 16000:
+            return self._json(400, {"error": "script required (max 16000 chars)"})
+        try:
+            api_key = load_anthropic_key()
+        except RuntimeError as exc:
+            return self._json(503, {"error": str(exc)})
+        ask = f"Split this into clips:\n\n{text}"
+        try:
+            scene_count = int(payload.get("scenes", 0))
+        except (TypeError, ValueError):
+            scene_count = 0
+        if 1 <= scene_count <= 15:
+            ask = f"Split this into exactly {scene_count} clips:\n\n{text}"
+        try:
+            script = _haiku(api_key, RESTRUCTURE_SYSTEM, [{"type": "text", "text": ask}])
+        except Exception as exc:
+            return self._json(502, {"error": _redact(str(exc))[:300]})
+        self._json(200, {"script": script})
 
     def _story_resume(self):
         """Generate the pendingScenes of a partial story, then re-stitch the whole movie."""

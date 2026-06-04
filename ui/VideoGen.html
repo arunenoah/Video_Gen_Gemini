@@ -28,10 +28,10 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="/ui/vg-icons.jsx?v=4"></script>
-<script type="text/babel" src="/ui/vg-core.jsx?v=4"></script>
-<script type="text/babel" src="/ui/vg-views-input.jsx?v=4"></script>
-<script type="text/babel" src="/ui/vg-views-output.jsx?v=4"></script>
+<script type="text/babel" src="/ui/vg-icons.jsx?v=5"></script>
+<script type="text/babel" src="/ui/vg-core.jsx?v=5"></script>
+<script type="text/babel" src="/ui/vg-views-input.jsx?v=5"></script>
+<script type="text/babel" src="/ui/vg-views-output.jsx?v=5"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
@@ -323,10 +323,24 @@ function App() {
   }
 
   // ---------- enhance: Claude Haiku writes each scene's animation prompt ----------
+  // Headerless paste (no "Clip N" / "Scene N" / "---")? First split it into clips —
+  // the split lands in the script editor, then a second Enhance polishes each clip.
   async function doEnhance() {
-    if (enhancing || !scenes.length) return;
+    if (enhancing || !script.trim()) return;
     setEnhancing(true);
     try {
+      const structured = /^\s*(clip|scene)\s*\d+\b/im.test(script) || /^\s*-{3,}\s*$/m.test(script);
+      if (mode === 'story' && !structured) {
+        const res = await fetch('/api/restructure', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ script }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.statusText);
+        setScript(data.script);
+        showToast('Haiku split your text into clips — review below, then Enhance again to polish each');
+        return;
+      }
       const { images, indexFor } = collectImages(scenes);
       const res = await fetch('/api/enhance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -337,10 +351,16 @@ function App() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
-      setScenes(prev => prev.map((s, i) => data.prompts[i]
+      const next = scenes.map((s, i) => data.prompts[i]
         ? { ...s, body: data.prompts[i], dialogue: [], enhanced: true }
-        : s));
-      showToast('Haiku wrote your animation prompts — review them on the Scenes tab');
+        : s);
+      setScenes(next);
+      // reflect the enhanced prompts in the script editor (lastScript guard skips reparse,
+      // preserving per-scene images, durations and the enhanced flag)
+      const text = next.map((s, i) => `Clip ${i + 1} — ${s.title}\n\n${s.body}`).join('\n\n');
+      lastScript.current = text;
+      setScript(text);
+      showToast('Haiku wrote your animation prompts — shown below and on the Scenes tab');
     } catch (err) {
       showToast('Enhance failed: ' + err.message);
     } finally { setEnhancing(false); }
