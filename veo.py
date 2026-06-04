@@ -103,12 +103,25 @@ def generate_clip(prompt: str, out_dir: Path, *, image_path: Path | None = None,
     if tier != "lite":  # lite tier rejects negativePrompt (400 INVALID_ARGUMENT)
         config_kwargs["negative_prompt"] = DEFAULT_NEGATIVE
 
+    # Veo preview tiers have low requests-per-minute quotas — back-to-back story
+    # clips can trip 429 RESOURCE_EXHAUSTED. Retry with backoff before giving up.
     notify("submitting")
-    operation = client.models.generate_videos(
-        model=model,
-        source=types.GenerateVideosSource(**source_kwargs),
-        config=types.GenerateVideosConfig(**config_kwargs),
-    )
+    operation = None
+    for attempt in range(4):
+        try:
+            operation = client.models.generate_videos(
+                model=model,
+                source=types.GenerateVideosSource(**source_kwargs),
+                config=types.GenerateVideosConfig(**config_kwargs),
+            )
+            break
+        except Exception as exc:
+            if "429" in str(exc) and attempt < 3:
+                wait = 70 * (attempt + 1)
+                notify(f"rate-limited, retrying in {wait}s (attempt {attempt + 2}/4)")
+                time.sleep(wait)
+            else:
+                raise
 
     started = time.monotonic()
     while not operation.done:

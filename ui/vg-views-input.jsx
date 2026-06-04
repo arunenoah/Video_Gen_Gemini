@@ -3,9 +3,11 @@
    ============================================================ */
 
 // ---------- SCRIPT VIEW ----------
-function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, goNext }) {
+function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, onWrite, writing, goNext }) {
   const fileRef = React.useRef(null);
   const [drag, setDrag] = React.useState(false);
+  const [idea, setIdea] = React.useState('');
+  const [ideaScenes, setIdeaScenes] = React.useState(3);
   const totalDur = scenes.reduce((a, s) => a + s.duration, 0);
 
   function applyTemplate(t) { setScript(t.script); }
@@ -53,14 +55,60 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance
         </div>
       </div>
 
+      {/* Haiku story writer — idea in, full script out */}
+      <div>
+        <VGOverline style={{ marginBottom: 10 }}>Or tell Haiku your idea — it writes the whole story</VGOverline>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', flexWrap: 'wrap' }}>
+          <input value={idea} onChange={e => setIdea(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && idea.trim() && !writing) onWrite(idea.trim(), ideaScenes); }}
+            placeholder='e.g. "Why do stars twinkle? — a bedtime science story"'
+            style={{
+              flex: 1, minWidth: 240, padding: '11px 14px', borderRadius: 12, border: '2px solid #e5e7eb',
+              outline: 'none', fontFamily: "'Instrument Sans',sans-serif", fontSize: 14, color: '#1a1a1a',
+              background: '#fff', transition: 'border .15s, box-shadow .15s',
+            }}
+            onFocus={e => { e.target.style.borderColor = theme.primary; e.target.style.boxShadow = '0 0 0 4px ' + theme.ring; }}
+            onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.boxShadow = 'none'; }}
+          />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 12px', borderRadius: 12, border: '2px solid #e5e7eb', background: '#fff' }}
+            title="How many scenes Haiku writes (1-15)">
+            <input type="number" min="1" max="15" value={ideaScenes}
+              onChange={e => setIdeaScenes(Math.max(1, Math.min(15, Number(e.target.value) || 1)))}
+              style={{ width: 44, border: 'none', outline: 'none', textAlign: 'center',
+                fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 14, color: '#374151', background: 'transparent' }} />
+            <span style={{ fontSize: 12.5, color: '#9ca3af', fontWeight: 600 }}>scenes</span>
+          </div>
+          <button onClick={() => idea.trim() && !writing && onWrite(idea.trim(), ideaScenes)}
+            disabled={writing || !idea.trim()} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 7, padding: '11px 18px', borderRadius: 12,
+              border: 'none', cursor: idea.trim() && !writing ? 'pointer' : 'not-allowed',
+              background: '#0f1419', color: '#fff', fontFamily: "'Instrument Sans',sans-serif",
+              fontWeight: 700, fontSize: 13.5, opacity: writing || !idea.trim() ? 0.6 : 1,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+            }}>
+            <VGIcon name="pencil" size={15} color="#fff" />{writing ? 'Writing…' : 'Write story'}
+          </button>
+        </div>
+      </div>
+
       {/* script editor */}
       <div>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
           <label style={{ fontSize: 14, fontWeight: 700, color: '#374151' }}>
             {mode === 'story' ? 'Your story script' : 'Your clip prompt'}
           </label>
-          <span style={{ fontSize: 12, color: '#9ca3af' }}>
-            {mode === 'story' ? 'New scenes start on “Clip N”, “Scene N”, or “---”' : 'Describe the shot, mood and any dialogue'}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 12, color: '#9ca3af' }}>
+              {mode === 'story' ? 'New scenes start on “Clip N”, “Scene N”, or “---”' : 'Describe the shot, mood and any dialogue'}
+            </span>
+            <button onClick={() => { navigator.clipboard.writeText(script || ''); }} disabled={!script.trim()}
+              title="Copy the script — use it anywhere, video generation optional"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 999,
+                border: '1.5px solid #e5e7eb', background: '#fff', cursor: script.trim() ? 'pointer' : 'not-allowed',
+                fontFamily: "'Instrument Sans',sans-serif", fontWeight: 600, fontSize: 11.5, color: '#6b7280',
+                opacity: script.trim() ? 1 : 0.5 }}>
+              ⧉ Copy script
+            </button>
           </span>
         </div>
         <div style={{ position: 'relative' }}>

@@ -131,6 +131,8 @@ function entryToGen(entry, i) {
   const m = entry.meta || {};
   return {
     id: entry.id,
+    kind: m.kind || 'clip',
+    scriptText: m.script || '',
     title: (m.prompt || 'Untitled').split('\n')[0].slice(0, 80),
     prompt: m.prompt || '',
     styleIcon: m.kind === 'stitch' ? 'stitch' : 'film',
@@ -144,6 +146,8 @@ function entryToGen(entry, i) {
     thumb: entry.thumb || null,
     images: entry.images || [],
     costNote: m.costNote || null,
+    status: m.status || 'complete',
+    pendingCount: (m.pendingScenes || []).length,
     clipUrl: '/generations/' + encodeURIComponent(entry.id) + '/clip.mp4',
   };
 }
@@ -225,6 +229,7 @@ function App() {
 
   const [serverOk, setServerOk] = useState(null);
   const [enhancing, setEnhancing] = useState(false);
+  const [writing, setWriting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [progress, setProgress] = useState({ pct: 0, scene: 1, label: '' });
   const [generations, setGenerations] = useState([]);
@@ -250,10 +255,12 @@ function App() {
       const entries = await res.json();
       setServerOk(res.ok);
       // story clips group under their story card; everything else is top-level
+      const topIds = new Set(entries.filter(e => !((e.meta || {}).kind === 'clip' && (e.meta || {}).storyId)).map(e => e.id));
       const top = [], children = {};
       entries.forEach(e => {
         const m = e.meta || {};
-        if (m.kind === 'clip' && m.storyId) (children[m.storyId] = children[m.storyId] || []).push(e);
+        // clips group under their story — unless the story is gone (failed run): show them top-level
+        if (m.kind === 'clip' && m.storyId && topIds.has(m.storyId)) (children[m.storyId] = children[m.storyId] || []).push(e);
         else top.push(e);
       });
       // order each story's clips by source order when known, else by id
@@ -289,6 +296,24 @@ function App() {
     if (!srcs.length) return;
     setScenes(prev => prev.map((s, i) => i < srcs.length ? { ...s, image: srcs[i] } : s));
     showToast(`Mapped ${srcs.length} ${srcs.length === 1 ? 'image' : 'images'} to scenes`);
+  }
+
+  // ---------- write: Claude Haiku writes the whole story from an idea ----------
+  async function doWriteStory(idea, sceneCount) {
+    if (writing) return;
+    setWriting(true);
+    try {
+      const res = await fetch('/api/write-story', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idea, scenes: sceneCount }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setScript(data.script);
+      showToast('Haiku wrote your story — read it below, then go to Scenes');
+    } catch (err) {
+      showToast('Story writing failed: ' + err.message);
+    } finally { setWriting(false); }
   }
 
   // ---------- enhance: Claude Haiku writes each scene's animation prompt ----------
@@ -382,6 +407,23 @@ function App() {
     }
   }
 
+  // ---------- resume a partial story (rate-limited mid-run) ----------
+  async function doResume(storyId) {
+    try {
+      const res = await fetch('/api/story/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: storyId }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      showToast(`Generating remaining scenes (est ${vgMoney(data.estCost || 0)})…`);
+      const job = await pollJob(data.jobId, 1);
+      setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
+      await loadLibrary();
+      showToast(job.partial ? 'Still rate-limited — partial story updated, try again later' : 'Story completed 🎬');
+    } catch (err) {
+      showToast('Resume failed: ' + err.message);
+      await loadLibrary();
+    }
+  }
+
   // ---------- stitch ----------
   const toggleSelect = (id) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
   async function doStitch() {
@@ -401,6 +443,14 @@ function App() {
   function resetAll() {
     setScript(VG_DEFAULT_SCRIPT); lastScript.current = '__force__';
     setTab('script');
+  }
+
+  // load an archived script back into the Script tab to make the video
+  function useScript(g) {
+    setScript(g.scriptText || g.prompt);
+    setMode('story');
+    setTab('script');
+    showToast('Script loaded — add images or go straight to Scenes');
   }
 
   const tier = VG_TIERS.find(x => x.id === tierId), res = VG_RESOLUTIONS.find(x => x.id === resId);
@@ -427,11 +477,11 @@ function App() {
 
   const content = (
     <div className="vg-view" key={tab}>
-      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} goNext={() => setTab('scenes')} />}
+      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} onWrite={doWriteStory} writing={writing} goNext={() => setTab('scenes')} />}
       {tab === 'scenes' && <ScenesView theme={theme} scenes={scenes} layout={editorLayout} onChange={updateScene} onMove={moveScene} onDelete={deleteScene} onImage={imageScene} onAdd={addScene} goBack={() => setTab('script')} goNext={() => setTab('style')} />}
       {tab === 'style' && <StyleView theme={theme} scenes={scenes} tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} styleId={styleId} setStyleId={setStyleId} voiceId={voiceId} setVoiceId={setVoiceId} musicId={musicId} setMusicId={setMusicId} goBack={() => setTab('scenes')} goNext={() => setTab('review')} />}
       {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} generating={generating} progress={progress} goBack={() => setTab('style')} />}
-      {tab === 'library' && <LibraryView theme={theme} generations={generations} clipsByStory={clipsByStory} selected={selected} toggleSelect={toggleSelect} onStitch={doStitch} onNew={resetAll} />}
+      {tab === 'library' && <LibraryView theme={theme} generations={generations} clipsByStory={clipsByStory} selected={selected} toggleSelect={toggleSelect} onStitch={doStitch} onResume={doResume} onUseScript={useScript} onNew={resetAll} />}
     </div>
   );
 

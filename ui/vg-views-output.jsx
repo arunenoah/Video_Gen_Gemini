@@ -208,7 +208,7 @@ function ReviewView({ theme, mode, scenes, tierId, resId, styleId, voiceId, musi
 }
 
 // ---------- LIBRARY VIEW ----------
-function LibraryView({ theme, generations, clipsByStory = {}, selected, toggleSelect, onStitch, onNew }) {
+function LibraryView({ theme, generations, clipsByStory = {}, selected, toggleSelect, onStitch, onResume, onUseScript, onNew }) {
   const totalSec = generations.reduce((a, g) => a + g.seconds, 0);
   const totalCost = generations.reduce((a, g) => a + g.cost, 0);
   const [openId, setOpenId] = React.useState(null);
@@ -252,36 +252,64 @@ function LibraryView({ theme, generations, clipsByStory = {}, selected, toggleSe
                   <div style={{ position: 'relative' }}>
                     <div onClick={() => setOpenId(g.id)}
                       style={{ aspectRatio: '16/9', cursor: 'pointer', background: g.thumb ? '#000' : `linear-gradient(135deg, ${g.accent.bg}, #fff 140%)`, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}
-                      title="Play movie">
+                      title={g.kind === 'script' ? 'Read script' : 'Play movie'}>
                       {g.thumb
                         ? <img src={g.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : <div style={{ color: g.accent.fg, opacity: 0.85 }}><VGIcon name={g.styleIcon || 'film'} size={38} stroke={1.6} /></div>}
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-                        <div style={{ width: 48, height: 48, borderRadius: 999, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
-                          <div style={{ width: 0, height: 0, borderLeft: '15px solid ' + theme.primary, borderTop: '9px solid transparent', borderBottom: '9px solid transparent', marginLeft: 4 }} />
+                        : <div style={{ color: g.accent.fg, opacity: 0.85 }}><VGIcon name={g.kind === 'script' ? 'book' : (g.styleIcon || 'film')} size={38} stroke={1.6} /></div>}
+                      {g.kind !== 'script' && (
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+                          <div style={{ width: 48, height: 48, borderRadius: 999, background: 'rgba(255,255,255,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
+                            <div style={{ width: 0, height: 0, borderLeft: '15px solid ' + theme.primary, borderTop: '9px solid transparent', borderBottom: '9px solid transparent', marginLeft: 4 }} />
+                          </div>
                         </div>
-                      </div>
-                      <div style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(15,20,25,0.78)', color: '#fff', fontSize: 11.5, fontWeight: 700, padding: '3px 8px', borderRadius: 6 }}>{g.seconds}s</div>
-                      <button onClick={e => { e.stopPropagation(); toggleSelect(g.id); }} style={{ position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: 7, border: '2px solid #fff', background: on ? theme.primary : 'rgba(15,20,25,0.35)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800 }}>{on ? '✓' : ''}</button>
+                      )}
+                      {g.kind !== 'script' && <div style={{ position: 'absolute', bottom: 8, right: 8, background: 'rgba(15,20,25,0.78)', color: '#fff', fontSize: 11.5, fontWeight: 700, padding: '3px 8px', borderRadius: 6 }}>{g.seconds}s</div>}
+                      {g.kind !== 'script' && <button onClick={e => { e.stopPropagation(); toggleSelect(g.id); }} style={{ position: 'absolute', top: 8, left: 8, width: 24, height: 24, borderRadius: 7, border: '2px solid #fff', background: on ? theme.primary : 'rgba(15,20,25,0.35)', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800 }}>{on ? '✓' : ''}</button>}
                     </div>
                   </div>
                   <div style={{ padding: 14 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 6 }}>
-                      <VGPill color="#15803d" bg="#dcfce7"><VGIcon name="check" size={12} />Ready</VGPill>
-                      <span style={{ fontSize: 12, color: '#9ca3af' }}>{g.tier} · {g.res}</span>
+                      {g.kind === 'script'
+                        ? <VGPill color={theme.primaryDark} bg={theme.tint}><VGIcon name="book" size={12} />Script — {g.sceneCount} scenes</VGPill>
+                        : g.status === 'partial'
+                          ? <VGPill color="#b45309" bg="#fef3c7"><VGIcon name="clock" size={12} />Partial — {g.pendingCount} scene{g.pendingCount === 1 ? '' : 's'} pending</VGPill>
+                          : <VGPill color="#15803d" bg="#dcfce7"><VGIcon name="check" size={12} />Ready</VGPill>}
+                      <span style={{ fontSize: 12, color: '#9ca3af' }}>{g.kind === 'script' ? 'Haiku' : `${g.tier} · ${g.res}`}</span>
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0f1419', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
                     <div style={{ fontSize: 12.5, color: '#9ca3af', marginTop: 3 }}>{g.sceneCount} clips · {g.when} · {vgMoney(g.cost)}</div>
-                    {(clipsByStory[g.id] || []).length > 0 && (
-                      <button onClick={() => setOpenId(g.id)} style={{
-                        marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
-                        borderRadius: 999, border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer',
-                        fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 12.5, color: '#374151',
-                      }}>
-                        <VGIcon name="layers" size={13} color={theme.primary} />
-                        View {clipsByStory[g.id].length} clips & images
-                      </button>
-                    )}
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {(clipsByStory[g.id] || []).length > 0 && (
+                        <button onClick={() => setOpenId(g.id)} style={{
+                          marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                          borderRadius: 999, border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer',
+                          fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 12.5, color: '#374151',
+                        }}>
+                          <VGIcon name="layers" size={13} color={theme.primary} />
+                          View {clipsByStory[g.id].length} clips & images
+                        </button>
+                      )}
+                      {g.status === 'partial' && onResume && (
+                        <button onClick={() => onResume(g.id)} style={{
+                          marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                          borderRadius: 999, border: 'none', background: theme.primary, color: '#fff', cursor: 'pointer',
+                          fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 12.5, boxShadow: theme.glow,
+                        }}>
+                          <VGIcon name="refresh" size={13} color="#fff" />
+                          Generate remaining {g.pendingCount}
+                        </button>
+                      )}
+                      {g.kind === 'script' && onUseScript && (
+                        <button onClick={() => onUseScript(g)} style={{
+                          marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px',
+                          borderRadius: 999, border: 'none', background: theme.primary, color: '#fff', cursor: 'pointer',
+                          fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 12.5, boxShadow: theme.glow,
+                        }}>
+                          <VGIcon name="video" size={13} color="#fff" />
+                          Make this video
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </VGCard>
               );
@@ -349,14 +377,20 @@ function LibraryDrawer({ theme, gen, clips, onClose }) {
           <button onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, borderRadius: 999, border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 16, color: '#6b7280', lineHeight: 1 }}>✕</button>
         </div>
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: 18, display: 'flex', flexDirection: 'column', gap: 18 }}>
-          <div style={{ flexShrink: 0 }}>
-            <video key={active.url} src={active.url} controls autoPlay playsInline
-              style={{ width: '100%', borderRadius: 12, background: '#000', display: 'block' }} />
-            <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 7, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <VGIcon name="play" size={11} color={theme.primary} />
-              Now playing: <strong style={{ color: '#374151' }}>{active.title}</strong>
+          {gen.kind !== 'script' && (
+            <div style={{ flexShrink: 0 }}>
+              <video key={active.url} src={active.url} controls autoPlay playsInline
+                style={{ width: '100%', borderRadius: 12, background: '#000', display: 'block' }} />
+              <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 7, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <VGIcon name="play" size={11} color={theme.primary} />
+                Now playing: <strong style={{ color: '#374151' }}>{active.title}</strong>
+              </div>
             </div>
-          </div>
+          )}
+          {gen.kind === 'script' && (
+            <div style={{ flexShrink: 0, fontSize: 13, lineHeight: 1.7, color: '#374151', whiteSpace: 'pre-wrap',
+              background: '#fafbfc', border: '1px solid #f3f4f6', borderRadius: 12, padding: '14px 16px' }}>{gen.scriptText}</div>
+          )}
 
           {clips.length > 0 && (
             <DrawerSection theme={theme} title="Clips in this movie" count={clips.length} defaultOpen>

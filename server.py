@@ -101,17 +101,52 @@ def run_stitch(job_id: str, gen_id: str, clip_ids: list[str]) -> None:
         shutil.rmtree(out_dir, ignore_errors=True)
 
 
-def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]) -> None:
-    """Generate every scene sequentially, then stitch into one archived story video."""
+def _finalize_story(story_id: str, clip_ids: list[str], title: str, tier: str,
+                    resolution: str, pending: list[dict], created_at: str | None = None) -> dict:
+    """Stitch completed clips and write the story meta. status=partial when scenes remain."""
+    out_dir = GENERATIONS / story_id
+    out_dir.mkdir(parents=True, exist_ok=True)
+    veo.stitch([GENERATIONS / c / "clip.mp4" for c in clip_ids], out_dir / "clip.mp4")
+    veo.extract_frames(out_dir / "clip.mp4", out_dir / "frames")
+    clip_metas = [_load_meta(c) for c in clip_ids]
+    meta = {
+        "id": story_id,
+        "createdAt": created_at or datetime.now(timezone.utc).isoformat(),
+        "prompt": title,
+        "kind": "story",
+        "status": "partial" if pending else "complete",
+        "sourceIds": clip_ids,
+        "pendingScenes": pending,
+        "tier": tier,
+        "resolution": resolution,
+        "duration": sum(m.get("duration", 0) for m in clip_metas),
+        "cost": round(sum(m.get("cost", 0) for m in clip_metas), 4),
+        "clipPath": "clip.mp4",
+    }
+    (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
+    return meta
+
+
+def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path],
+              prior_ids: list[str] | None = None, created_at: str | None = None) -> None:
+    """Generate scenes sequentially, stitch into one story video.
+
+    On mid-run failure (e.g. 429 quota) with at least one clip done, the story is
+    stitched from completed clips and saved as status=partial with the remaining
+    scene definitions in pendingScenes — resumable via /api/story/resume.
+    """
     out_dir = GENERATIONS / story_id
     scenes = payload["scenes"]
-    n = len(scenes)
-    clip_ids: list[str] = []
-    total_cost = 0.0
+    prior_ids = list(prior_ids or [])
+    n_total = len(prior_ids) + len(scenes)
+    title = payload.get("title") or f"Story — {n_total} scenes"
+    clip_ids = list(prior_ids)
+    new_done = 0
     try:
-        for i, scene in enumerate(scenes):
+        for k, scene in enumerate(scenes):
+            i = len(prior_ids) + k
             cid = f"{story_id}-c{i + 1:02d}"
-            prefix = f"clip {i + 1}/{n}: "
+            prefix = f"clip {i + 1}/{n_total}: "
             idx = scene.get("imageIndex")
             img = image_paths[idx] if idx is not None else None
             meta = veo.generate_clip(
@@ -131,31 +166,27 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
             })
             (GENERATIONS / cid / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
             clip_ids.append(cid)
-            total_cost += meta["cost"]
+            new_done += 1
 
         job_update(job_id, status="running", detail="stitching")
-        veo.stitch([GENERATIONS / c / "clip.mp4" for c in clip_ids], out_dir / "clip.mp4")
-        veo.extract_frames(out_dir / "clip.mp4", out_dir / "frames")
-        meta = {
-            "id": story_id,
-            "createdAt": datetime.now(timezone.utc).isoformat(),
-            "prompt": payload.get("title") or f"Story — {n} scenes",
-            "kind": "story",
-            "sourceIds": clip_ids,
-            "tier": payload["tier"],
-            "resolution": payload["resolution"],
-            "duration": sum(s["duration"] for s in scenes),
-            "cost": round(total_cost, 4),
-            "clipPath": "clip.mp4",
-        }
-        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
-        job_update(job_id, status="done", detail="done", genId=story_id, cost=round(total_cost, 4))
+        meta = _finalize_story(story_id, clip_ids, title, payload["tier"], payload["resolution"],
+                               pending=[], created_at=created_at)
+        job_update(job_id, status="done", detail="done", genId=story_id, cost=meta["cost"])
     except Exception as exc:
-        done = len(clip_ids)
-        job_update(job_id, status="failed",
-                   detail=f"failed at clip {done + 1}/{n}: " + _redact(str(exc))[:400] +
-                          (f" — {done} completed clips kept in the feed" if done else ""))
-        # keep completed clips for retry/manual stitch; remove only the story shell
+        err = _redact(str(exc))[:300]
+        if clip_ids:  # save a playable partial story + what's left to generate
+            pending = scenes[new_done:]
+            try:
+                job_update(job_id, status="running", detail="rate limited — stitching partial story")
+                meta = _finalize_story(story_id, clip_ids, title, payload["tier"], payload["resolution"],
+                                       pending=pending, created_at=created_at)
+                job_update(job_id, status="done", genId=story_id, cost=meta["cost"], partial=True,
+                           detail=f"partial: {len(clip_ids)}/{n_total} scenes done ({err}) — "
+                                  f"use Generate remaining when quota resets")
+                return
+            except Exception as stitch_exc:
+                err = f"{err}; stitch failed: {_redact(str(stitch_exc))[:150]}"
+        job_update(job_id, status="failed", detail=f"failed at clip {len(clip_ids) + 1}/{n_total}: {err}")
         if not (out_dir / "clip.mp4").is_file():
             shutil.rmtree(out_dir, ignore_errors=True)
 
@@ -180,6 +211,47 @@ ENHANCER_SYSTEM = (
 )
 
 
+WRITER_SYSTEM = (
+    "You are a children's story writer for short animated videos (ages 4-8 unless told otherwise). "
+    "Given a story idea, write a video script with exactly the requested number of scenes. "
+    "STRICT FORMAT for every scene:\n\n"
+    "Clip {n} — {Short Title}\n"
+    "{1-3 sentences describing the visual action, present tense, concrete and animatable in 6-8 seconds}\n"
+    "Dialogue:\n"
+    "{Speaker}: \"{short line}\"\n\n"
+    "Rules: 1-3 dialogue lines per scene (never more than 4); speaker names 15 characters or less; "
+    "dialogue lines 12 words or less; warm, playful, gently educational when the topic suits; "
+    "a satisfying ending in the final scene; blank line between scenes; "
+    "output ONLY the script — no commentary, no markdown headers."
+)
+
+
+def _haiku(api_key: str, system: str, content: list) -> str:
+    """One Claude Haiku call. content = Anthropic messages content blocks."""
+    body = json.dumps({
+        "model": ENHANCER_MODEL,
+        "max_tokens": 2048,
+        "system": system,
+        "messages": [{"role": "user", "content": content}],
+    }).encode("utf-8")
+    req = urllib_request.Request(ANTHROPIC_URL, data=body, headers={
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+    })
+    try:
+        with urllib_request.urlopen(req, timeout=90) as r:
+            data = json.loads(r.read().decode("utf-8"))
+    except HTTPError as e:
+        detail = _redact(e.read().decode("utf-8", "replace"))[:300]
+        raise RuntimeError(f"Anthropic API {e.code}: {detail}")
+    parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
+    text = "\n".join(parts).strip()
+    if not text:
+        raise RuntimeError("empty response")
+    return text
+
+
 def load_anthropic_key() -> str:
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip() or veo.config_key("anthropic")
     if not key:
@@ -202,28 +274,7 @@ def enhance_scene(api_key: str, scene_text: str, image_b64: str | None, image_mi
         content.append({"type": "image", "source": {
             "type": "base64", "media_type": image_mime, "data": image_b64}})
     content.append({"type": "text", "text": f"Scene script:\n\n{scene_text}"})
-    body = json.dumps({
-        "model": ENHANCER_MODEL,
-        "max_tokens": 1024,
-        "system": ENHANCER_SYSTEM,
-        "messages": [{"role": "user", "content": content}],
-    }).encode("utf-8")
-    req = urllib_request.Request(ANTHROPIC_URL, data=body, headers={
-        "Content-Type": "application/json",
-        "x-api-key": api_key,
-        "anthropic-version": "2023-06-01",
-    })
-    try:
-        with urllib_request.urlopen(req, timeout=60) as r:
-            data = json.loads(r.read().decode("utf-8"))
-    except HTTPError as e:
-        detail = _redact(e.read().decode("utf-8", "replace"))[:300]
-        raise RuntimeError(f"Anthropic API {e.code}: {detail}")
-    parts = [b.get("text", "") for b in data.get("content", []) if b.get("type") == "text"]
-    text = "\n".join(parts).strip()
-    if not text:
-        raise RuntimeError("empty enhancer response")
-    return text
+    return _haiku(api_key, ENHANCER_SYSTEM, content)
 
 
 def _redact(text: str) -> str:
@@ -273,6 +324,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._story()
         if self.path == "/api/enhance":
             return self._enhance()
+        if self.path == "/api/story/resume":
+            return self._story_resume()
+        if self.path == "/api/write-story":
+            return self._write_story()
         if self.path == "/api/stitch":
             return self._stitch()
         self.send_error(404)
@@ -406,6 +461,89 @@ class Handler(SimpleHTTPRequestHandler):
         args = {"scenes": scenes, "tier": tier, "resolution": resolution,
                 "title": str(payload.get("title") or "")[:200]}
         threading.Thread(target=run_story, args=(job_id, story_id, args, image_paths),
+                         daemon=True).start()
+        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4)})
+
+    def _write_story(self):
+        """Claude Haiku writes a full multi-scene script from a one-line idea."""
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+        idea = str(payload.get("idea", "")).strip()
+        if not idea or len(idea) > 2000:
+            return self._json(400, {"error": "idea required (max 2000 chars)"})
+        try:
+            scene_count = int(payload.get("scenes", 3))
+        except (TypeError, ValueError):
+            scene_count = 0
+        if not (1 <= scene_count <= 15):
+            return self._json(400, {"error": "scenes must be 1-15"})
+        audience = str(payload.get("audience", "")).strip()[:200]
+        try:
+            api_key = load_anthropic_key()
+        except RuntimeError as exc:
+            return self._json(503, {"error": str(exc)})
+        ask = f"Story idea: {idea}\n\nNumber of scenes: {scene_count}"
+        if audience:
+            ask += f"\nAudience: {audience}"
+        try:
+            script = _haiku(api_key, WRITER_SYSTEM, [{"type": "text", "text": ask}])
+        except Exception as exc:
+            return self._json(502, {"error": _redact(str(exc))[:300]})
+
+        # archive the paid output — scripts are history too
+        gid = make_id("script-" + idea)
+        out_dir = GENERATIONS / gid
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "script.txt").write_text(script)
+        meta = {
+            "id": gid,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "kind": "script",
+            "prompt": f"📖 {idea}",
+            "script": script,
+            "sceneCount": scene_count,
+            "cost": 0.01,
+            "costNote": "Haiku story writing",
+            "duration": 0,
+        }
+        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False))
+        self._json(200, {"script": script, "id": gid})
+
+    def _story_resume(self):
+        """Generate the pendingScenes of a partial story, then re-stitch the whole movie."""
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+        story_id = str(payload.get("id", ""))
+        if not ID_RE.match(story_id):
+            return self._json(400, {"error": "invalid id"})
+        meta = _load_meta(story_id)
+        if not meta or meta.get("kind") != "story":
+            return self._json(404, {"error": "story not found"})
+        pending = meta.get("pendingScenes") or []
+        if meta.get("status") != "partial" or not pending:
+            return self._json(400, {"error": "story has no pending scenes"})
+        try:
+            veo.load_api_key()
+        except RuntimeError as exc:
+            return self._json(503, {"error": str(exc)})
+
+        # reference images were saved into the story folder at submit time (src01, src02…)
+        image_paths = sorted((GENERATIONS / story_id).glob("src*"))
+        args = {
+            "scenes": pending,
+            "tier": meta.get("tier", "lite"),
+            "resolution": meta.get("resolution", "720p"),
+            "title": meta.get("prompt", "Story"),
+        }
+        job_id = uuid.uuid4().hex
+        est = sum(veo.estimate_cost(args["tier"], args["resolution"], s.get("duration", 8)) for s in pending)
+        job_update(job_id, status="queued", detail="queued", genId=None, estCost=round(est, 4))
+        threading.Thread(target=run_story,
+                         args=(job_id, story_id, args, image_paths),
+                         kwargs={"prior_ids": meta.get("sourceIds") or [],
+                                 "created_at": meta.get("createdAt")},
                          daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4)})
 
