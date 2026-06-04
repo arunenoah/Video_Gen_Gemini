@@ -93,7 +93,11 @@ No database, no cloud. `meta.json` per entry is the full record: the exact promp
 | Grok Imagine | `x-ai/grok-imagine-video` (OpenRouter) | ~$0.07 | — (720p max) | ~$0.56 |
 | Seedance 1.5 | `bytedance/seedance-1-5-pro` (OpenRouter) | ~$0.052 | ~$0.117 | $0.42–0.94 |
 
-OpenRouter engines are billed by OpenRouter; the archived cost uses the API's reported `usage.cost` when available, falling back to the per-second estimate. OpenRouter rates above are **observed billed rates** (2026-06-04 test runs incl. audio) — the listing's bare per-second price bills lower than reality. All models generate native audio. Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
+OpenRouter engines are billed by OpenRouter; the archived cost uses the API's reported `usage.cost` when available, falling back to the per-second estimate. OpenRouter rates above are **observed billed rates** (2026-06-04 test runs incl. audio) — the listing's bare per-second price bills lower than reality. All models generate native audio.
+
+**Format**: 16:9 landscape (default) or 9:16 portrait for Shorts/Reels/TikTok — selectable per run in both UIs. Constraint: 9:16 on Veo is 720p only (server-enforced); Grok is 720p max everywhere; Seedance does 9:16 up to 1080p.
+
+**Character reference** (Script tab): drop a character sheet or up to 3 reference images — characters keep that exact look in every scene without the reference appearing on screen. Veo uses `reference_images` (ASSET "ingredients"); Grok/Seedance use OpenRouter `input_references`. A scene with its own starting image uses that frame instead (the two modes are mutually exclusive per clip). Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
 
 ### Rate limits handled end-to-end
 

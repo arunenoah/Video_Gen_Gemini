@@ -35,6 +35,7 @@ IMAGE_MIMES = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 MAX_CLIPS_PER_STITCH = 30
 MAX_SCENES = 20
 MAX_STORY_IMAGES = 10
+MAX_REF_IMAGES = 3                   # character reference images per run (engine caps)
 ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 
 JOBS: dict[str, dict] = {}            # in-memory job state
@@ -50,15 +51,20 @@ ENGINES = {
     "seedance": {"provider": "openrouter", "resolutions": {"720p", "1080p"}},
 }
 DURATIONS = (4, 6, 8)                 # shared clip lengths, valid on every engine
+ASPECTS = ("16:9", "9:16")            # landscape / portrait (Shorts, Reels)
 
 
-def validate_engine(tier: str, resolution: str) -> str | None:
-    """Returns an error message, or None when tier+resolution are valid."""
+def validate_engine(tier: str, resolution: str, aspect: str = "16:9") -> str | None:
+    """Returns an error message, or None when tier+resolution+aspect are valid."""
     spec = ENGINES.get(tier)
     if spec is None:
         return "invalid tier"
     if resolution not in spec["resolutions"]:
         return f"{tier} supports {sorted(spec['resolutions'])} only"
+    if aspect not in ASPECTS:
+        return f"aspect must be one of {list(ASPECTS)}"
+    if aspect == "9:16" and resolution == "1080p" and spec["provider"] == "veo":
+        return "9:16 on Veo supports 720p only"
     return None
 
 
@@ -77,15 +83,18 @@ def engine_estimate(tier: str, resolution: str, duration: int) -> float:
 
 
 def engine_generate(tier: str, prompt: str, out_dir: Path, *, image_path: Path | None,
-                    resolution: str, duration: int, progress) -> dict:
+                    resolution: str, duration: int, aspect_ratio: str = "16:9",
+                    reference_paths: list[Path] | None = None, progress) -> dict:
     """Dispatch one clip generation to the engine's provider module."""
     if ENGINES[tier]["provider"] == "openrouter":
         return openrouter_video.generate_clip(
             prompt, out_dir, engine=tier, image_path=image_path,
-            resolution=resolution, duration=duration, progress=progress)
+            resolution=resolution, duration=duration, aspect_ratio=aspect_ratio,
+            reference_paths=reference_paths, progress=progress)
     return veo.generate_clip(
         prompt, out_dir, image_path=image_path,
-        tier=tier, resolution=resolution, duration=duration, progress=progress)
+        tier=tier, resolution=resolution, duration=duration,
+        aspect_ratio=aspect_ratio, reference_paths=reference_paths, progress=progress)
 
 
 def make_id(prompt: str) -> str:
@@ -99,13 +108,16 @@ def job_update(job_id: str, **fields) -> None:
         JOBS.setdefault(job_id, {}).update(fields)
 
 
-def run_generation(job_id: str, gen_id: str, payload: dict, image_path: Path | None) -> None:
+def run_generation(job_id: str, gen_id: str, payload: dict, image_path: Path | None,
+                   ref_paths: list[Path] | None = None) -> None:
     out_dir = GENERATIONS / gen_id
     try:
         meta = engine_generate(
             payload["tier"], payload["prompt"], out_dir,
             image_path=image_path,
             resolution=payload["resolution"], duration=payload["duration"],
+            aspect_ratio=payload.get("aspect", "16:9"),
+            reference_paths=ref_paths,
             progress=lambda msg: job_update(job_id, status="running", detail=msg),
         )
         meta.update({
@@ -149,7 +161,8 @@ def run_stitch(job_id: str, gen_id: str, clip_ids: list[str]) -> None:
 
 
 def _finalize_story(story_id: str, clip_ids: list[str], title: str, tier: str,
-                    resolution: str, pending: list[dict], created_at: str | None = None) -> dict:
+                    resolution: str, pending: list[dict], created_at: str | None = None,
+                    aspect: str = "16:9") -> dict:
     """Stitch completed clips and write the story meta. status=partial when scenes remain."""
     out_dir = GENERATIONS / story_id
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -166,6 +179,7 @@ def _finalize_story(story_id: str, clip_ids: list[str], title: str, tier: str,
         "pendingScenes": pending,
         "tier": tier,
         "resolution": resolution,
+        "aspectRatio": aspect,
         "duration": sum(m.get("duration", 0) for m in clip_metas),
         "cost": round(sum(m.get("cost", 0) for m in clip_metas), 4),
         "clipPath": "clip.mp4",
@@ -175,7 +189,8 @@ def _finalize_story(story_id: str, clip_ids: list[str], title: str, tier: str,
 
 
 def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path],
-              prior_ids: list[str] | None = None, created_at: str | None = None) -> None:
+              prior_ids: list[str] | None = None, created_at: str | None = None,
+              ref_paths: list[Path] | None = None) -> None:
     """Generate scenes sequentially, stitch into one story video.
 
     On mid-run failure (e.g. 429 quota) with at least one clip done, the story is
@@ -200,6 +215,8 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
                 payload["tier"], scene["prompt"], GENERATIONS / cid,
                 image_path=img,
                 resolution=payload["resolution"], duration=scene["duration"],
+                aspect_ratio=payload.get("aspect", "16:9"),
+                reference_paths=ref_paths,
                 progress=lambda msg, p=prefix: job_update(job_id, status="running", detail=p + msg),
             )
             meta.update({
@@ -216,7 +233,8 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
 
         job_update(job_id, status="running", detail="stitching")
         meta = _finalize_story(story_id, clip_ids, title, payload["tier"], payload["resolution"],
-                               pending=[], created_at=created_at)
+                               pending=[], created_at=created_at,
+                               aspect=payload.get("aspect", "16:9"))
         job_update(job_id, status="done", detail="done", genId=story_id, cost=meta["cost"])
     except Exception as exc:
         err = _redact(str(exc))[:300]
@@ -225,7 +243,8 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
             try:
                 job_update(job_id, status="running", detail="rate limited — stitching partial story")
                 meta = _finalize_story(story_id, clip_ids, title, payload["tier"], payload["resolution"],
-                                       pending=pending, created_at=created_at)
+                                       pending=pending, created_at=created_at,
+                                       aspect=payload.get("aspect", "16:9"))
                 job_update(job_id, status="done", genId=story_id, cost=meta["cost"], partial=True,
                            detail=f"partial: {len(clip_ids)}/{n_total} scenes done ({err}) — "
                                   f"use Generate remaining when quota resets")
@@ -346,6 +365,31 @@ def _redact(text: str) -> str:
     return re.sub(r"\b(AIza[0-9A-Za-z_\-]{10,}|AQ\.[0-9A-Za-z_\-]{10,})\b", "REDACTED", text)
 
 
+def _save_b64_images(raw_list: list, out_dir: Path, prefix: str, max_n: int):
+    """Validate + save a list of {base64, mime} images. Returns (paths, error)."""
+    if not isinstance(raw_list, list) or len(raw_list) > max_n:
+        return None, f"max {max_n} {prefix} images"
+    paths: list[Path] = []
+    for i, img in enumerate(raw_list):
+        mime = str((img or {}).get("mime", "")).lower()
+        b64 = (img or {}).get("base64") or ""
+        if mime not in IMAGE_MIMES:
+            return None, f"{prefix} image {i + 1}: type must be one of {sorted(IMAGE_MIMES)}"
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+        try:
+            raw = base64.b64decode(b64, validate=True)
+        except Exception:
+            return None, f"{prefix} image {i + 1}: invalid base64"
+        if len(raw) > 20 * 1024 * 1024:
+            return None, f"{prefix} image {i + 1}: exceeds 20 MB"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        path = out_dir / f"{prefix}{i + 1:02d}.{IMAGE_MIMES[mime]}"
+        path.write_bytes(raw)
+        paths.append(path)
+    return paths, None
+
+
 def _load_meta(gen_id: str) -> dict:
     try:
         return json.loads((GENERATIONS / gen_id / "meta.json").read_text())
@@ -413,13 +457,14 @@ class Handler(SimpleHTTPRequestHandler):
         prompt = str(payload.get("prompt", "")).strip()
         tier = str(payload.get("tier", "lite"))
         resolution = str(payload.get("resolution", "720p"))
+        aspect = str(payload.get("aspect", "16:9"))
         try:
             duration = int(payload.get("duration", 8))
         except (TypeError, ValueError):
             duration = 0
         if not prompt or len(prompt) > 8000:
             return self._json(400, {"error": "prompt required (max 8000 chars)"})
-        engine_err = validate_engine(tier, resolution)
+        engine_err = validate_engine(tier, resolution, aspect)
         if engine_err or duration not in DURATIONS:
             return self._json(400, {"error": engine_err or "invalid duration"})
 
@@ -443,16 +488,25 @@ class Handler(SimpleHTTPRequestHandler):
             image_path = out_dir / f"start.{IMAGE_MIMES[mime]}"
             image_path.write_bytes(raw)
 
+        # character reference images (consistent characters, never shown on screen)
+        ref_paths, ref_err = _save_b64_images(payload.get("referenceImages") or [],
+                                              GENERATIONS / gen_id, "ref", MAX_REF_IMAGES)
+        if ref_err:
+            shutil.rmtree(GENERATIONS / gen_id, ignore_errors=True)
+            return self._json(400, {"error": ref_err})
+
         try:
             check_engine_key(tier)
         except RuntimeError as exc:
+            shutil.rmtree(GENERATIONS / gen_id, ignore_errors=True)
             return self._json(503, {"error": str(exc)})
 
         job_id = uuid.uuid4().hex
         job_update(job_id, status="queued", detail="queued", genId=None,
                    estCost=engine_estimate(tier, resolution, duration))
-        args = {"prompt": prompt, "tier": tier, "resolution": resolution, "duration": duration}
-        threading.Thread(target=run_generation, args=(job_id, gen_id, args, image_path),
+        args = {"prompt": prompt, "tier": tier, "resolution": resolution,
+                "duration": duration, "aspect": aspect}
+        threading.Thread(target=run_generation, args=(job_id, gen_id, args, image_path, ref_paths),
                          daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": gen_id})
 
@@ -463,7 +517,8 @@ class Handler(SimpleHTTPRequestHandler):
 
         tier = str(payload.get("tier", "lite"))
         resolution = str(payload.get("resolution", "720p"))
-        engine_err = validate_engine(tier, resolution)
+        aspect = str(payload.get("aspect", "16:9"))
+        engine_err = validate_engine(tier, resolution, aspect)
         if engine_err:
             return self._json(400, {"error": engine_err})
 
@@ -516,6 +571,13 @@ class Handler(SimpleHTTPRequestHandler):
             path.write_bytes(raw)
             image_paths.append(path)
 
+        # character reference images — applied to every scene without its own start frame
+        ref_paths, ref_err = _save_b64_images(payload.get("referenceImages") or [],
+                                              out_dir, "ref", MAX_REF_IMAGES)
+        if ref_err:
+            shutil.rmtree(out_dir, ignore_errors=True)
+            return self._json(400, {"error": ref_err})
+
         try:
             check_engine_key(tier)
         except RuntimeError as exc:
@@ -525,10 +587,10 @@ class Handler(SimpleHTTPRequestHandler):
         job_id = uuid.uuid4().hex
         est = sum(engine_estimate(tier, resolution, s["duration"]) for s in scenes)
         job_update(job_id, status="queued", detail="queued", genId=None, estCost=round(est, 4))
-        args = {"scenes": scenes, "tier": tier, "resolution": resolution,
+        args = {"scenes": scenes, "tier": tier, "resolution": resolution, "aspect": aspect,
                 "title": str(payload.get("title") or "")[:200]}
         threading.Thread(target=run_story, args=(job_id, story_id, args, image_paths),
-                         daemon=True).start()
+                         kwargs={"ref_paths": ref_paths}, daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4)})
 
     def _write_story(self):
@@ -624,12 +686,14 @@ class Handler(SimpleHTTPRequestHandler):
         except RuntimeError as exc:
             return self._json(503, {"error": str(exc)})
 
-        # reference images were saved into the story folder at submit time (src01, src02…)
+        # scene images (src01…) and character refs (ref01…) were saved at submit time
         image_paths = sorted((GENERATIONS / story_id).glob("src*"))
+        ref_paths = sorted((GENERATIONS / story_id).glob("ref*"))
         args = {
             "scenes": pending,
             "tier": tier,
             "resolution": meta.get("resolution", "720p"),
+            "aspect": meta.get("aspectRatio", "16:9"),
             "title": meta.get("prompt", "Story"),
         }
         job_id = uuid.uuid4().hex
@@ -638,7 +702,8 @@ class Handler(SimpleHTTPRequestHandler):
         threading.Thread(target=run_story,
                          args=(job_id, story_id, args, image_paths),
                          kwargs={"prior_ids": meta.get("sourceIds") or [],
-                                 "created_at": meta.get("createdAt")},
+                                 "created_at": meta.get("createdAt"),
+                                 "ref_paths": ref_paths},
                          daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4)})
 
@@ -715,7 +780,8 @@ class Handler(SimpleHTTPRequestHandler):
                     continue
                 frames = sorted((child / "frames").glob("f*.png"))
                 images = sorted([p.name for p in child.glob("start.*")] +
-                                [p.name for p in child.glob("src*.*") if p.suffix in (".png", ".jpg", ".webp")])
+                                [p.name for p in child.glob("src*.*") if p.suffix in (".png", ".jpg", ".webp")] +
+                                [p.name for p in child.glob("ref*.*") if p.suffix in (".png", ".jpg", ".webp")])
                 entries.append({
                     "id": child.name,
                     "meta": meta,

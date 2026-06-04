@@ -132,7 +132,8 @@ def _image_data_url(image_path: Path) -> str:
 
 
 def generate_clip(prompt: str, out_dir: Path, *, engine: str, image_path: Path | None = None,
-                  resolution: str = "720p", duration: int = 8, progress=None) -> dict:
+                  resolution: str = "720p", duration: int = 8, aspect_ratio: str = "16:9",
+                  reference_paths: list[Path] | None = None, progress=None) -> dict:
     """Generate one clip via OpenRouter. Returns meta dict (same shape as veo.generate_clip)."""
     if engine not in MODELS:
         raise ValueError(f"unknown engine {engine!r}")
@@ -141,6 +142,8 @@ def generate_clip(prompt: str, out_dir: Path, *, engine: str, image_path: Path |
         raise ValueError(f"{spec['name']} supports {sorted(spec['resolutions'])} (got {resolution!r})")
     if duration not in spec["durations"]:
         raise ValueError(f"duration must be one of {sorted(spec['durations'])} (got {duration})")
+    if aspect_ratio not in ("16:9", "9:16"):
+        raise ValueError(f"unknown aspect ratio {aspect_ratio!r}")
     prompt = (prompt or "").strip()
     if not prompt:
         raise ValueError("empty prompt")
@@ -153,7 +156,7 @@ def generate_clip(prompt: str, out_dir: Path, *, engine: str, image_path: Path |
         "prompt": prompt,
         "duration": duration,
         "resolution": resolution,
-        "aspect_ratio": "16:9",
+        "aspect_ratio": aspect_ratio,
     }
     if image_path is not None:
         image_path = Path(image_path).resolve()
@@ -164,6 +167,17 @@ def generate_clip(prompt: str, out_dir: Path, *, engine: str, image_path: Path |
             "image_url": {"url": _image_data_url(image_path)},
             "frame_type": "first_frame",
         }]
+    elif reference_paths:
+        # Character/style reference images (reference-to-video) keep characters
+        # consistent across clips without showing the reference on screen.
+        # Skipped when a starting frame is set — the two modes are separate.
+        refs = []
+        for p in reference_paths[:3]:
+            p = Path(p).resolve()
+            if not p.is_file():
+                raise ValueError(f"reference image not found: {p.name}")
+            refs.append({"type": "image_url", "image_url": {"url": _image_data_url(p)}})
+        payload["input_references"] = refs
 
     # Submit (retry on 429 like the Veo path)
     notify("submitting")
@@ -224,6 +238,8 @@ def generate_clip(prompt: str, out_dir: Path, *, engine: str, image_path: Path |
         "tier": engine,
         "resolution": resolution,
         "duration": duration,
+        "aspectRatio": aspect_ratio,
+        "referenceCount": len(reference_paths[:3]) if reference_paths and image_path is None else 0,
         "cost": cost,
         "clipPath": "clip.mp4",
         "generationSeconds": int(time.monotonic() - started),
@@ -238,6 +254,7 @@ if __name__ == "__main__":
     parser.add_argument("--engine", choices=MODELS, default="grok")
     parser.add_argument("--resolution", default="720p")
     parser.add_argument("--duration", type=int, choices=[4, 6, 8], default=8)
+    parser.add_argument("--aspect", choices=["16:9", "9:16"], default="16:9")
     parser.add_argument("--out", default="out")
     args = parser.parse_args()
     meta = generate_clip(
@@ -245,6 +262,7 @@ if __name__ == "__main__":
         engine=args.engine,
         image_path=Path(args.image) if args.image else None,
         resolution=args.resolution, duration=args.duration,
+        aspect_ratio=args.aspect,
         progress=print,
     )
     print(f"done — ${meta['cost']:.2f} — {Path(args.out) / meta['clipPath']}")

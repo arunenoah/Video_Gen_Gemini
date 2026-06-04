@@ -169,6 +169,13 @@
           <option value="8" selected>8 s</option>
         </select>
       </div>
+      <div>
+        <label for="aspect">Format</label>
+        <select id="aspect">
+          <option value="16:9" selected>16:9 Landscape</option>
+          <option value="9:16">9:16 Shorts / Reels</option>
+        </select>
+      </div>
     </div>
 
     <div class="est" id="estimate">Estimated cost: $0.40</div>
@@ -211,10 +218,12 @@ function setMode(m) {
 }
 
 // ── cost estimate ──
+const VEO_TIERS = ["lite", "fast", "quality"];
 function updateEstimate() {
-  // Grok Imagine tops out at 720p — snap the selector back down
+  // Grok Imagine tops out at 720p; Veo portrait (9:16) is 720p only — snap the selector down
   const res = $("resolution");
-  const no1080 = !PRICING[$("tier").value]["1080p"];
+  const no1080 = !PRICING[$("tier").value]["1080p"]
+    || (VEO_TIERS.includes($("tier").value) && $("aspect").value === "9:16");
   res.querySelector('option[value="1080p"]').disabled = no1080;
   if (no1080 && res.value === "1080p") res.value = "720p";
   const rate = PRICING[$("tier").value][res.value] || 0;
@@ -228,7 +237,7 @@ function updateEstimate() {
   }
   $("estimate").textContent = `Estimated cost: $${c.toFixed(2)}${suffix}`;
 }
-["tier","resolution","duration"].forEach(id => $(id).addEventListener("change", updateEstimate));
+["tier","resolution","duration","aspect"].forEach(id => $(id).addEventListener("change", updateEstimate));
 updateEstimate();
 
 // ── story: script parsing ──
@@ -438,7 +447,7 @@ $("generateBtn").addEventListener("click", async () => {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           title: sceneState[0].prompt.slice(0, 60),
-          tier: $("tier").value, resolution: $("resolution").value,
+          tier: $("tier").value, resolution: $("resolution").value, aspect: $("aspect").value,
           scenes: sceneState.map(s => ({ prompt: s.prompt, duration: s.duration, imageIndex: s.imageIndex })),
           images: storyImages.map(im => ({ base64: im.b64, mime: im.mime })),
         }),
@@ -454,7 +463,7 @@ $("generateBtn").addEventListener("click", async () => {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt, tier: $("tier").value, resolution: $("resolution").value,
-          duration: Number($("duration").value),
+          aspect: $("aspect").value, duration: Number($("duration").value),
           imageBase64: imageB64 || undefined, imageMime: imageMime || undefined,
         }),
       });

@@ -80,6 +80,11 @@ const VG_RESOLUTIONS = [
   { id: '1080p', label: '1080p', note: 'Full HD' },
 ];
 
+const VG_ASPECTS = [
+  { id: '16:9', label: 'Landscape', note: 'YouTube · TV', ratio: '16 / 9' },
+  { id: '9:16', label: 'Portrait', note: 'Shorts · Reels · TikTok', ratio: '9 / 16' },
+];
+
 const VG_STYLES = [
   { id: 'cartoon', icon: 'smile', label: 'Cartoon' },
   { id: 'watercolor', icon: 'brush', label: 'Watercolor' },
@@ -324,7 +329,7 @@ function vgReadImage(file) {
 }
 
 Object.assign(window, {
-  VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_STYLES, VG_VOICES, VG_MUSIC,
+  VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
   VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });

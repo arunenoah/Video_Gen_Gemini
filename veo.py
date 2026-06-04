@@ -64,6 +64,7 @@ def estimate_cost(tier: str, resolution: str, duration: int) -> float:
 
 def generate_clip(prompt: str, out_dir: Path, *, image_path: Path | None = None,
                   tier: str = "lite", resolution: str = "720p", duration: int = 8,
+                  aspect_ratio: str = "16:9", reference_paths: list[Path] | None = None,
                   progress=None) -> dict:
     """Generate one clip. Returns meta dict. Raises on failure.
 
@@ -73,6 +74,10 @@ def generate_clip(prompt: str, out_dir: Path, *, image_path: Path | None = None,
         raise ValueError(f"unknown tier {tier!r}")
     if resolution not in ("720p", "1080p"):
         raise ValueError(f"unknown resolution {resolution!r}")
+    if aspect_ratio not in ("16:9", "9:16"):
+        raise ValueError(f"unknown aspect ratio {aspect_ratio!r}")
+    if aspect_ratio == "9:16" and resolution == "1080p":
+        raise ValueError("9:16 on Veo supports 720p only")
     if duration not in (4, 6, 8):
         raise ValueError(f"duration must be 4, 6 or 8 (got {duration})")
     prompt = (prompt or "").strip()
@@ -99,9 +104,22 @@ def generate_clip(prompt: str, out_dir: Path, *, image_path: Path | None = None,
         "number_of_videos": 1,
         "resolution": resolution,
         "duration_seconds": duration,
+        "aspect_ratio": aspect_ratio,
     }
     if tier != "lite":  # lite tier rejects negativePrompt (400 INVALID_ARGUMENT)
         config_kwargs["negative_prompt"] = DEFAULT_NEGATIVE
+
+    # Character/asset reference images (Veo 3.1 "ingredients", max 3) keep characters
+    # consistent across clips. Skipped when a starting frame is set — image-to-video
+    # already locks the look, and the API treats the two modes separately.
+    if reference_paths and image_path is None:
+        config_kwargs["reference_images"] = [
+            types.VideoGenerationReferenceImage(
+                image=types.Image.from_file(location=str(Path(p).resolve())),
+                reference_type="ASSET",
+            )
+            for p in reference_paths[:3]
+        ]
 
     # Veo preview tiers have low requests-per-minute quotas — back-to-back story
     # clips can trip 429 RESOURCE_EXHAUSTED. Retry with backoff before giving up.
@@ -156,6 +174,8 @@ def generate_clip(prompt: str, out_dir: Path, *, image_path: Path | None = None,
         "tier": tier,
         "resolution": resolution,
         "duration": duration,
+        "aspectRatio": aspect_ratio,
+        "referenceCount": len(reference_paths[:3]) if reference_paths and image_path is None else 0,
         "cost": estimate_cost(tier, resolution, duration),
         "clipPath": "clip.mp4",
         "generationSeconds": int(time.monotonic() - started),
@@ -205,12 +225,14 @@ if __name__ == "__main__":
     parser.add_argument("--tier", choices=MODELS, default="lite")
     parser.add_argument("--resolution", choices=["720p", "1080p"], default="720p")
     parser.add_argument("--duration", type=int, choices=[4, 6, 8], default=8)
+    parser.add_argument("--aspect", choices=["16:9", "9:16"], default="16:9")
     parser.add_argument("--out", default="out")
     args = parser.parse_args()
     meta = generate_clip(
         args.prompt, Path(args.out),
         image_path=Path(args.image) if args.image else None,
         tier=args.tier, resolution=args.resolution, duration=args.duration,
+        aspect_ratio=args.aspect,
         progress=print,
     )
     print(f"done — ${meta['cost']:.2f} — {Path(args.out) / meta['clipPath']}")

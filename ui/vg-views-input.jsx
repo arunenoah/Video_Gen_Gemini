@@ -3,9 +3,11 @@
    ============================================================ */
 
 // ---------- SCRIPT VIEW ----------
-function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, onWrite, writing, goNext }) {
+function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, refImages = [], onRefImages, onRemoveRef, onWrite, writing, goNext }) {
   const fileRef = React.useRef(null);
+  const refFileRef = React.useRef(null);
   const [drag, setDrag] = React.useState(false);
+  const [refDrag, setRefDrag] = React.useState(false);
   const [idea, setIdea] = React.useState('');
   const [ideaScenes, setIdeaScenes] = React.useState(3);
   const totalDur = scenes.reduce((a, s) => a + s.duration, 0);
@@ -153,6 +155,49 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance
             onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
         </div>
       )}
+
+      {/* character reference images — consistent characters in every scene */}
+      <div>
+        <VGOverline style={{ marginBottom: 10 }}>Character reference (optional)</VGOverline>
+        <div
+          onDragOver={e => { e.preventDefault(); setRefDrag(true); }}
+          onDragLeave={() => setRefDrag(false)}
+          onDrop={e => { e.preventDefault(); setRefDrag(false); if (e.dataTransfer.files.length && onRefImages) onRefImages(e.dataTransfer.files); }}
+          style={{
+            border: '2px dashed ' + (refDrag ? theme.primary : '#d1d5db'), borderRadius: 16, padding: 16,
+            background: refDrag ? theme.tint : '#fafafa', transition: 'all .15s',
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+          }}>
+          {refImages.map((src, i) => (
+            <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
+              <img src={src} alt={`Character reference ${i + 1}`}
+                style={{ width: 96, height: 64, objectFit: 'cover', borderRadius: 10, border: '2px solid ' + theme.primary, display: 'block' }} />
+              <button onClick={() => onRemoveRef && onRemoveRef(i)} title="Remove" style={{
+                position: 'absolute', top: -7, right: -7, width: 21, height: 21, borderRadius: 999,
+                border: '2px solid #fff', background: '#dc2626', color: '#fff', cursor: 'pointer',
+                fontSize: 11, fontWeight: 800, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>✕</button>
+            </div>
+          ))}
+          {refImages.length < 3 && (
+            <button onClick={() => refFileRef.current && refFileRef.current.click()} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 12,
+              border: '1.5px solid #e5e7eb', background: '#fff', cursor: 'pointer',
+              fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 13, color: '#374151',
+            }}>
+              <VGIcon name="user" size={15} color={theme.primary} />
+              {refImages.length ? 'Add another' : 'Add character sheet / reference'}
+            </button>
+          )}
+          <div style={{ fontSize: 12.5, color: '#9ca3af', lineHeight: 1.5, flex: 1, minWidth: 200 }}>
+            Drop a character sheet or up to 3 reference images — characters keep this exact look in
+            <strong style={{ color: '#6b7280' }}> every scene</strong>, without the reference appearing on screen.
+            Scenes with their own starting image use that instead.
+          </div>
+          <input ref={refFileRef} type="file" accept="image/png,image/jpeg,image/webp" multiple style={{ display: 'none' }}
+            onChange={e => { if (e.target.files.length && onRefImages) onRefImages(e.target.files); e.target.value = ''; }} />
+        </div>
+      </div>
 
       {/* live summary + next */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, paddingTop: 4 }}>

@@ -28,10 +28,10 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="/ui/vg-icons.jsx?v=5"></script>
-<script type="text/babel" src="/ui/vg-core.jsx?v=5"></script>
-<script type="text/babel" src="/ui/vg-views-input.jsx?v=5"></script>
-<script type="text/babel" src="/ui/vg-views-output.jsx?v=5"></script>
+<script type="text/babel" src="/ui/vg-icons.jsx?v=7"></script>
+<script type="text/babel" src="/ui/vg-core.jsx?v=7"></script>
+<script type="text/babel" src="/ui/vg-views-input.jsx?v=7"></script>
+<script type="text/babel" src="/ui/vg-views-output.jsx?v=7"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
@@ -101,6 +101,11 @@ function finalPrompt(s, styleId, voiceId, musicId, hasImage) {
   if (MUSIC_DESC[musicId]) parts.push(MUSIC_DESC[musicId]);
   parts.push('No text overlays, no logos, no watermarks.');
   return parts.filter(Boolean).join('\n\n');
+}
+
+// data-URL list → [{base64, mime}] payload shape
+function imagePayload(srcs) {
+  return srcs.map(src => ({ base64: src, mime: (src.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg' }));
 }
 
 // scenes with images → payload {images:[{base64,mime}], indexFor: sceneIdx → imageIndex|null}
@@ -223,6 +228,8 @@ function App() {
 
   const [tierId, setTierId] = useState('lite');
   const [resId, setResId] = useState('720p');
+  const [aspectId, setAspectId] = useState('16:9');
+  const [refImages, setRefImages] = useState([]);   // character reference data-URLs (max 3)
   const [styleId, setStyleId] = useState('cartoon');
   const [voiceId, setVoiceId] = useState('sunny');
   const [musicId, setMusicId] = useState('playful');
@@ -238,11 +245,12 @@ function App() {
   const [session, setSession] = useState({ runs: 0, cost: 0 });
   const [toast, setToast] = useState(null);
 
-  // engines with a 720p ceiling (Grok Imagine): snap resolution back down
+  // engines with a 720p ceiling (Grok Imagine) and Veo portrait (9:16): snap resolution down
   useEffect(() => {
     const t = VG_TIERS.find(x => x.id === tierId);
-    if (t && t.maxRes === '720p' && resId === '1080p') setResId('720p');
-  }, [tierId]);
+    const veoPortrait = t && t.engine === 'Veo 3.1' && aspectId === '9:16';
+    if (((t && t.maxRes === '720p') || veoPortrait) && resId === '1080p') setResId('720p');
+  }, [tierId, aspectId]);
 
   // reparse when script text changes; preserve per-index images + durations
   useEffect(() => {
@@ -292,6 +300,18 @@ function App() {
   const deleteScene = (id) => setScenes(s => s.filter(x => x.id !== id));
   const imageScene = (id, src) => setScenes(s => s.map(x => x.id === id ? { ...x, image: src } : x));
   const addScene = () => setScenes(s => [...s, { id: 'sc' + Date.now(), n: s.length + 1, title: 'New scene', body: '', dialogue: [], duration: 6, accent: SCENE_ACCENTS[s.length % SCENE_ACCENTS.length], image: null }]);
+
+  // Character reference images: guide how characters LOOK without appearing on screen
+  async function handleRefImages(files) {
+    const srcs = [];
+    for (const f of Array.from(files)) {
+      try { srcs.push(await vgReadImage(f)); } catch (e) { showToast(e.message); }
+    }
+    if (!srcs.length) return;
+    setRefImages(prev => [...prev, ...srcs].slice(0, 3));
+    showToast('Character reference added — characters will match it in every scene');
+  }
+  const removeRefImage = (idx) => setRefImages(prev => prev.filter((_, i) => i !== idx));
 
   // Script-tab dropzone: map images onto scenes in order
   async function handleStoryImages(files) {
@@ -398,12 +418,14 @@ function App() {
           title: scenes[0].title,
           tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
           resolution: resId,
+          aspect: aspectId,
           scenes: scenes.map((s, i) => ({
             prompt: finalPrompt(s, styleId, voiceId, musicId, indexFor[i] !== null),
             duration: s.duration,
             imageIndex: indexFor[i],
           })),
           images,
+          referenceImages: imagePayload(refImages),
         };
         res = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       } else {
@@ -412,7 +434,9 @@ function App() {
           prompt: finalPrompt(s, styleId, voiceId, musicId, !!s.image),
           tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
           resolution: resId,
+          aspect: aspectId,
           duration: s.duration,
+          referenceImages: imagePayload(refImages),
         };
         if (s.image) { body.imageBase64 = s.image; body.imageMime = (s.image.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg'; }
         res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -503,10 +527,10 @@ function App() {
 
   const content = (
     <div className="vg-view" key={tab}>
-      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} onWrite={doWriteStory} writing={writing} goNext={() => setTab('scenes')} />}
+      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} goNext={() => setTab('scenes')} />}
       {tab === 'scenes' && <ScenesView theme={theme} scenes={scenes} layout={editorLayout} onChange={updateScene} onMove={moveScene} onDelete={deleteScene} onImage={imageScene} onAdd={addScene} goBack={() => setTab('script')} goNext={() => setTab('style')} />}
-      {tab === 'style' && <StyleView theme={theme} scenes={scenes} tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} styleId={styleId} setStyleId={setStyleId} voiceId={voiceId} setVoiceId={setVoiceId} musicId={musicId} setMusicId={setMusicId} goBack={() => setTab('scenes')} goNext={() => setTab('review')} />}
-      {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} generating={generating} progress={progress} goBack={() => setTab('style')} />}
+      {tab === 'style' && <StyleView theme={theme} scenes={scenes} tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} aspectId={aspectId} setAspectId={setAspectId} styleId={styleId} setStyleId={setStyleId} voiceId={voiceId} setVoiceId={setVoiceId} musicId={musicId} setMusicId={setMusicId} goBack={() => setTab('scenes')} goNext={() => setTab('review')} />}
+      {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} aspectId={aspectId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} generating={generating} progress={progress} goBack={() => setTab('style')} />}
       {tab === 'library' && <LibraryView theme={theme} generations={generations} clipsByStory={clipsByStory} selected={selected} toggleSelect={toggleSelect} onStitch={doStitch} onResume={doResume} onUseScript={useScript} onNew={resetAll} />}
     </div>
   );

@@ -9,10 +9,11 @@ function vgEstimate(scenes, tier, res) {
 }
 
 // ---------- STYLE VIEW ----------
-function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId, setStyleId, voiceId, setVoiceId, musicId, setMusicId, goBack, goNext }) {
+function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId, setAspectId, styleId, setStyleId, voiceId, setVoiceId, musicId, setMusicId, goBack, goNext }) {
   const tier = VG_TIERS.find(t => t.id === tierId);
   const res = VG_RESOLUTIONS.find(r => r.id === resId);
   const est = vgEstimate(scenes, tier, res);
+  const isVeo = tier.engine === 'Veo 3.1';
 
   const ChipGrid = ({ items, value, onPick, cols = 3 }) => (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols},1fr)`, gap: 9 }}>
@@ -60,17 +61,46 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId,
           <VGOverline style={{ marginBottom: 11 }}>Resolution</VGOverline>
           <div style={{ display: 'flex', gap: 10 }}>
             {VG_RESOLUTIONS.map(r => {
+              const noTier = tier.maxRes === '720p' && r.id === '1080p';
+              const noAspect = isVeo && aspectId === '9:16' && r.id === '1080p';
+              const blocked = noTier || noAspect;
               const on = resId === r.id;
-              const blocked = tier.maxRes === '720p' && r.id === '1080p';
               return (
                 <button key={r.id} onClick={() => !blocked && setResId(r.id)} disabled={blocked}
-                  title={blocked ? `${tier.name} supports up to 720p` : undefined} style={{
+                  title={blocked ? (noTier ? `${tier.name} supports up to 720p` : '9:16 on Veo supports 720p only') : undefined} style={{
                   flex: 1, padding: '13px', borderRadius: 12, cursor: blocked ? 'not-allowed' : 'pointer', textAlign: 'center',
                   border: '2px solid ' + (on ? theme.primary : '#e5e7eb'), background: on ? theme.tint : '#fff',
                   fontFamily: "'Instrument Sans',sans-serif", transition: 'all .15s', opacity: blocked ? 0.45 : 1,
                 }}>
                   <div style={{ fontWeight: 800, fontSize: 16, color: on ? theme.primaryDark : '#0f1419' }}>{r.label}</div>
-                  <div style={{ fontSize: 11.5, color: '#9ca3af', fontWeight: 600, marginTop: 2 }}>{blocked ? `not on ${tier.name}` : r.note}{r.mult > 1 ? ` · ${r.mult}×` : ''}</div>
+                  <div style={{ fontSize: 11.5, color: '#9ca3af', fontWeight: 600, marginTop: 2 }}>{blocked ? (noTier ? `not on ${tier.name}` : 'not in 9:16 on Veo') : r.note}{r.mult > 1 ? ` · ${r.mult}×` : ''}</div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* format / aspect ratio */}
+        <section>
+          <VGOverline style={{ marginBottom: 11 }}>Format</VGOverline>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {VG_ASPECTS.map(a => {
+              const on = aspectId === a.id;
+              return (
+                <button key={a.id} onClick={() => setAspectId(a.id)} style={{
+                  flex: 1, padding: '13px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
+                  border: '2px solid ' + (on ? theme.primary : '#e5e7eb'), background: on ? theme.tint : '#fff',
+                  fontFamily: "'Instrument Sans',sans-serif", transition: 'all .15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+                }}>
+                  <span style={{
+                    width: a.id === '9:16' ? 15 : 36, height: a.id === '9:16' ? 26 : 21, borderRadius: 4,
+                    border: '2.5px solid ' + (on ? theme.primary : '#c4c9cf'), flexShrink: 0,
+                  }} />
+                  <span>
+                    <div style={{ fontWeight: 800, fontSize: 16, color: on ? theme.primaryDark : '#0f1419' }}>{a.id} {a.label}</div>
+                    <div style={{ fontSize: 11.5, color: '#9ca3af', fontWeight: 600, marginTop: 2 }}>{a.note}</div>
+                  </span>
                 </button>
               );
             })}
@@ -109,6 +139,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId,
             {[
               ['Tier', VG_TIERS.find(t => t.id === tierId).name],
               ['Resolution', VG_RESOLUTIONS.find(r => r.id === resId).label],
+              ['Format', (VG_ASPECTS.find(a => a.id === aspectId) || {}).id],
               ['Art style', (VG_STYLES.find(s => s.id === styleId) || {}).label],
               ['Voice', (VG_VOICES.find(v => v.id === voiceId) || {}).label],
               ['Music', (VG_MUSIC.find(m => m.id === musicId) || {}).label],
@@ -131,7 +162,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId,
 }
 
 // ---------- REVIEW VIEW ----------
-function ReviewView({ theme, mode, scenes, tierId, resId, styleId, voiceId, musicId, onGenerate, generating, progress, goBack }) {
+function ReviewView({ theme, mode, scenes, tierId, resId, aspectId, styleId, voiceId, musicId, onGenerate, generating, progress, goBack }) {
   const tier = VG_TIERS.find(t => t.id === tierId);
   const res = VG_RESOLUTIONS.find(r => r.id === resId);
   const est = vgEstimate(scenes, tier, res);
@@ -154,6 +185,7 @@ function ReviewView({ theme, mode, scenes, tierId, resId, styleId, voiceId, musi
           ['clock', `${est.seconds}s`],
           [tier.icon, tier.name],
           ['monitor', res.label],
+          ['monitor', aspectId === '9:16' ? '9:16 Shorts' : '16:9 Landscape'],
           [st.icon, st.label],
           [vc.icon, vc.label],
           [mu.icon, mu.label],
