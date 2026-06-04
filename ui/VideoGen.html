@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VideoGen for Kids</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: 'Instrument Sans', sans-serif; color: #0f1419; -webkit-font-smoothing: antialiased; }
+  textarea, input, button { font-family: inherit; }
+  @keyframes vgspin { to { transform: rotate(360deg); } }
+  .vg-spin { animation: vgspin .8s linear infinite; }
+  @keyframes vgfade { from { transform: translateY(8px); } to { transform: none; } }
+  @media (prefers-reduced-motion: no-preference) { .vg-view { animation: vgfade .28s ease; } }
+  @keyframes vgtoast { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  ::selection { background: rgba(23,123,181,0.18); }
+  textarea::-webkit-scrollbar { width: 10px; }
+  textarea::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 999px; border: 3px solid #fff; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" src="/ui/vg-icons.jsx?v=2"></script>
+<script type="text/babel" src="/ui/vg-core.jsx?v=2"></script>
+<script type="text/babel" src="/ui/vg-views-input.jsx?v=2"></script>
+<script type="text/babel" src="/ui/vg-views-output.jsx?v=2"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const TABS = [
+  { id: 'script',  step: 1, icon: 'pencil', label: 'Script' },
+  { id: 'scenes',  step: 2, icon: 'clapper', label: 'Scenes' },
+  { id: 'style',   step: 3, icon: 'sliders', label: 'Style' },
+  { id: 'review',  step: 4, icon: 'check-circle', label: 'Review' },
+  { id: 'library', step: 0, icon: 'film', label: 'Library' },
+];
+
+// ---------- preferences (localStorage replaces the prototype tweaks host) ----------
+const PREF_DEFAULTS = { theme: 'ocean', navLayout: 'Top tabs', sceneEditor: 'Grid' };
+function usePrefs() {
+  const [prefs, setPrefs] = useState(() => {
+    try { return { ...PREF_DEFAULTS, ...JSON.parse(localStorage.getItem('vg_prefs') || '{}') }; }
+    catch { return { ...PREF_DEFAULTS }; }
+  });
+  const setPref = (k, v) => setPrefs(p => {
+    const next = { ...p, [k]: v };
+    try { localStorage.setItem('vg_prefs', JSON.stringify(next)); } catch {}
+    return next;
+  });
+  return [prefs, setPref];
+}
+
+// ---------- prompt assembly (UI choices → Veo prompt text) ----------
+const STYLE_PREFIX = {
+  cartoon: '3D Pixar-style cartoon animation, bright friendly colors, expressive characters.',
+  watercolor: 'Soft watercolor storybook animation, gentle brush textures, dreamy washes of color.',
+  clay: 'Claymation stop-motion style animation, soft clay characters, handmade charm.',
+  papercut: 'Layered paper cut-out style animation, flat textured shapes, crafted depth.',
+  pixel: 'Retro pixel-art style animation, chunky pixels, vibrant playful palette.',
+  storybook: 'Classic illustrated storybook animation, warm painted textures, cozy lighting.',
+};
+const VOICE_DESC = {
+  sunny: 'a warm, sunny female narrator',
+  grandpa: 'a cozy, gentle grandpa voice',
+  robot: 'a friendly cheerful robot voice',
+  fairy: 'a sparkly, magical fairy voice',
+};
+const MUSIC_DESC = {
+  gentle: 'Gentle, soft lullaby background music.',
+  playful: 'Playful, upbeat background music.',
+  adventure: 'Adventurous, bright orchestral background music.',
+  none: 'No background music.',
+};
+
+function sceneToPrompt(s) {
+  let p = (s.body || '').trim();
+  if (s.dialogue && s.dialogue.length) {
+    p += '\n\nDialogue:\n' + s.dialogue.map(d => `${d.who}: "${d.line}"`).join('\n');
+  }
+  return p;
+}
+
+function finalPrompt(s, styleId, voiceId, musicId, hasImage) {
+  const parts = [];
+  if (!s.enhanced) {
+    let prefix = STYLE_PREFIX[styleId] || '';
+    if (hasImage) prefix += ' Maintain the exact art style, characters, lighting and layout of the starting frame.';
+    parts.push(prefix.trim());
+  }
+  parts.push(sceneToPrompt(s));
+  if (VOICE_DESC[voiceId]) parts.push(`Narration voice: ${VOICE_DESC[voiceId]}.`);
+  if (MUSIC_DESC[musicId]) parts.push(MUSIC_DESC[musicId]);
+  parts.push('No text overlays, no logos, no watermarks.');
+  return parts.filter(Boolean).join('\n\n');
+}
+
+// scenes with images → payload {images:[{base64,mime}], indexFor: sceneIdx → imageIndex|null}
+function collectImages(scenes) {
+  const images = [], indexBySrc = new Map();
+  const indexFor = scenes.map(s => {
+    if (!s.image) return null;
+    if (!indexBySrc.has(s.image)) {
+      const mime = (s.image.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg';
+      indexBySrc.set(s.image, images.length);
+      images.push({ base64: s.image, mime });
+    }
+    return indexBySrc.get(s.image);
+  });
+  return { images, indexFor };
+}
+
+function fmtWhen(iso) {
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' ' +
+           d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  } catch { return ''; }
+}
+
+// archive entry (server meta.json) → Library card shape
+function entryToGen(entry, i) {
+  const m = entry.meta || {};
+  return {
+    id: entry.id,
+    title: (m.prompt || 'Untitled').split('\n')[0].slice(0, 80),
+    prompt: m.prompt || '',
+    styleIcon: m.kind === 'stitch' ? 'stitch' : 'film',
+    accent: SCENE_ACCENTS[i % SCENE_ACCENTS.length],
+    seconds: m.duration || 0,
+    cost: m.cost || 0,
+    tier: m.tier || (m.kind === 'stitch' ? 'stitched' : ''),
+    res: m.resolution || '',
+    sceneCount: (m.sourceIds || []).length || 1,
+    when: fmtWhen(m.createdAt),
+    thumb: entry.thumb || null,
+    images: entry.images || [],
+    costNote: m.costNote || null,
+    clipUrl: '/generations/' + encodeURIComponent(entry.id) + '/clip.mp4',
+  };
+}
+
+function Segmented({ label, value, options, onChange, theme }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+      <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9ca3af' }}>{label}</span>
+      <div style={{ display: 'flex', gap: 3, background: '#f1f3f5', padding: 3, borderRadius: 10 }}>
+        {options.map(o => {
+          const on = value === o;
+          return (
+            <button key={o} onClick={() => onChange(o)} style={{
+              padding: '6px 13px', borderRadius: 8, border: 'none', cursor: 'pointer',
+              fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 12.5,
+              background: on ? '#fff' : 'transparent', color: on ? theme.primaryDark : '#6b7280',
+              boxShadow: on ? '0 1px 3px rgba(0,0,0,0.12)' : 'none', transition: 'all .14s',
+            }}>{o}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function BottomDock({ theme, prefs, setPref }) {
+  return (
+    <div style={{
+      position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 40,
+      background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(14px)', borderTop: '1px solid #e8eaed',
+      padding: '11px 24px', display: 'flex', alignItems: 'center', gap: 22, flexWrap: 'wrap',
+      boxShadow: '0 -4px 20px rgba(0,0,0,0.05)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+        <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: '#9ca3af' }}>Theme</span>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {Object.keys(VG_THEMES).map(k => {
+            const th = VG_THEMES[k], on = prefs.theme === k;
+            return (
+              <button key={k} onClick={() => setPref('theme', k)} title={th.name} aria-label={th.name} style={{
+                width: 28, height: 28, borderRadius: 999, cursor: 'pointer', padding: 0,
+                background: th.hero, border: '2.5px solid ' + (on ? '#fff' : 'transparent'),
+                boxShadow: on ? '0 0 0 2.5px ' + th.primary + ', 0 2px 6px rgba(0,0,0,0.15)' : 'inset 0 0 0 1px rgba(0,0,0,0.08)',
+                transition: 'all .15s', transform: on ? 'scale(1.08)' : 'none',
+              }} />
+            );
+          })}
+        </div>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: theme.primaryDark, minWidth: 64 }}>{theme.name}</span>
+      </div>
+      <div style={{ width: 1, height: 26, background: '#e5e7eb' }} />
+      <Segmented label="Navigation" value={prefs.navLayout} options={['Top tabs', 'Side rail']} onChange={v => setPref('navLayout', v)} theme={theme} />
+      <div style={{ width: 1, height: 26, background: '#e5e7eb' }} />
+      <Segmented label="Storyboard" value={prefs.sceneEditor} options={['Grid', 'List']} onChange={v => setPref('sceneEditor', v)} theme={theme} />
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 7, color: '#9ca3af', fontSize: 12 }}>
+        <VGIcon name="check" size={13} color="#9ca3af" /> Saves automatically
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [prefs, setPref] = usePrefs();
+  const theme = VG_THEMES[prefs.theme] || VG_THEMES.ocean;
+  const sidebar = prefs.navLayout === 'Side rail';
+  const editorLayout = prefs.sceneEditor === 'List' ? 'list' : 'grid';
+
+  const [tab, setTab] = useState('script');
+  const [mode, setMode] = useState('story');
+  const [script, setScript] = useState(VG_DEFAULT_SCRIPT);
+  const [scenes, setScenes] = useState(() => vgParseScript(VG_DEFAULT_SCRIPT));
+  const lastScript = useRef(VG_DEFAULT_SCRIPT);
+
+  const [tierId, setTierId] = useState('lite');
+  const [resId, setResId] = useState('720p');
+  const [styleId, setStyleId] = useState('cartoon');
+  const [voiceId, setVoiceId] = useState('sunny');
+  const [musicId, setMusicId] = useState('playful');
+
+  const [serverOk, setServerOk] = useState(null);
+  const [enhancing, setEnhancing] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [progress, setProgress] = useState({ pct: 0, scene: 1, label: '' });
+  const [generations, setGenerations] = useState([]);
+  const [clipsByStory, setClipsByStory] = useState({});
+  const [selected, setSelected] = useState([]);
+  const [session, setSession] = useState({ runs: 0, cost: 0 });
+  const [toast, setToast] = useState(null);
+
+  // reparse when script text changes; preserve per-index images + durations
+  useEffect(() => {
+    if (script !== lastScript.current) {
+      lastScript.current = script;
+      setScenes(prev => vgParseScript(script).map((p, i) => prev[i] ? { ...p, image: prev[i].image, duration: prev[i].duration } : p));
+    }
+  }, [script]);
+
+  function showToast(msg) { setToast(msg); clearTimeout(showToast._t); showToast._t = setTimeout(() => setToast(null), 3200); }
+
+  // ---------- library (the real archive) ----------
+  async function loadLibrary() {
+    try {
+      const res = await fetch('/api/list');
+      const entries = await res.json();
+      setServerOk(res.ok);
+      // story clips group under their story card; everything else is top-level
+      const top = [], children = {};
+      entries.forEach(e => {
+        const m = e.meta || {};
+        if (m.kind === 'clip' && m.storyId) (children[m.storyId] = children[m.storyId] || []).push(e);
+        else top.push(e);
+      });
+      // order each story's clips by source order when known, else by id
+      const byStory = {};
+      top.forEach(e => {
+        const ids = (e.meta && e.meta.sourceIds) || [];
+        const kids = children[e.id] || [];
+        kids.sort((a, b) => {
+          const ia = ids.indexOf(a.id), ib = ids.indexOf(b.id);
+          return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib) || a.id.localeCompare(b.id);
+        });
+        if (kids.length) byStory[e.id] = kids.map(entryToGen);
+      });
+      setGenerations(top.map(entryToGen));
+      setClipsByStory(byStory);
+    } catch { setServerOk(false); }
+  }
+  useEffect(() => { loadLibrary(); }, []);
+
+  // ---------- scene editing ----------
+  const updateScene = (id, patch) => setScenes(s => s.map(x => x.id === id ? { ...x, ...patch } : x));
+  const moveScene = (idx, dir) => setScenes(s => { const n = [...s]; const j = idx + dir; if (j < 0 || j >= n.length) return s; [n[idx], n[j]] = [n[j], n[idx]]; return n; });
+  const deleteScene = (id) => setScenes(s => s.filter(x => x.id !== id));
+  const imageScene = (id, src) => setScenes(s => s.map(x => x.id === id ? { ...x, image: src } : x));
+  const addScene = () => setScenes(s => [...s, { id: 'sc' + Date.now(), n: s.length + 1, title: 'New scene', body: '', dialogue: [], duration: 6, accent: SCENE_ACCENTS[s.length % SCENE_ACCENTS.length], image: null }]);
+
+  // Script-tab dropzone: map images onto scenes in order
+  async function handleStoryImages(files) {
+    const srcs = [];
+    for (const f of Array.from(files).slice(0, 10)) {
+      try { srcs.push(await vgReadImage(f)); } catch (e) { showToast(e.message); }
+    }
+    if (!srcs.length) return;
+    setScenes(prev => prev.map((s, i) => i < srcs.length ? { ...s, image: srcs[i] } : s));
+    showToast(`Mapped ${srcs.length} ${srcs.length === 1 ? 'image' : 'images'} to scenes`);
+  }
+
+  // ---------- enhance: Claude Haiku writes each scene's animation prompt ----------
+  async function doEnhance() {
+    if (enhancing || !scenes.length) return;
+    setEnhancing(true);
+    try {
+      const { images, indexFor } = collectImages(scenes);
+      const res = await fetch('/api/enhance', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenes: scenes.map((s, i) => ({ prompt: sceneToPrompt(s), imageIndex: indexFor[i] })),
+          images,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      setScenes(prev => prev.map((s, i) => data.prompts[i]
+        ? { ...s, body: data.prompts[i], dialogue: [], enhanced: true }
+        : s));
+      showToast('Haiku wrote your animation prompts — review them on the Scenes tab');
+    } catch (err) {
+      showToast('Enhance failed: ' + err.message);
+    } finally { setEnhancing(false); }
+  }
+
+  // ---------- generate: real Veo jobs ----------
+  async function pollJob(jobId, total) {
+    for (;;) {
+      await new Promise(r => setTimeout(r, 4000));
+      let job;
+      try {
+        const res = await fetch('/api/job/' + jobId);
+        job = await res.json();
+        if (!res.ok) throw new Error(job.error || res.statusText);
+      } catch { continue; }
+      if (job.status === 'done') return job;
+      if (job.status === 'failed') throw new Error(job.detail || 'generation failed');
+      const detail = job.detail || job.status;
+      const m = detail.match(/clip (\d+)\/(\d+)/);
+      const cur = m ? Number(m[1]) : 1, tot = m ? Number(m[2]) : total;
+      const pct = /stitch/i.test(detail) ? 97 : Math.min(94, Math.max(3, ((cur - 0.5) / tot) * 94));
+      setProgress({ pct, scene: cur, label: /stitch/i.test(detail) ? 'Stitching the final movie…' : `Rendering scene ${cur} of ${tot}…` });
+    }
+  }
+
+  async function doGenerate() {
+    if (generating || !scenes.length) return;
+    setGenerating(true);
+    setProgress({ pct: 2, scene: 1, label: 'Sending your story to the studio…' });
+    try {
+      let res, body;
+      if (mode === 'story') {
+        const { images, indexFor } = collectImages(scenes);
+        body = {
+          title: scenes[0].title,
+          tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
+          resolution: resId,
+          scenes: scenes.map((s, i) => ({
+            prompt: finalPrompt(s, styleId, voiceId, musicId, indexFor[i] !== null),
+            duration: s.duration,
+            imageIndex: indexFor[i],
+          })),
+          images,
+        };
+        res = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      } else {
+        const s = scenes[0];
+        body = {
+          prompt: finalPrompt(s, styleId, voiceId, musicId, !!s.image),
+          tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
+          resolution: resId,
+          duration: s.duration,
+        };
+        if (s.image) { body.imageBase64 = s.image; body.imageMime = (s.image.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg'; }
+        res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      const job = await pollJob(data.jobId, scenes.length);
+      setProgress({ pct: 100, scene: scenes.length, label: 'Done!' });
+      setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
+      await loadLibrary();
+      setGenerating(false);
+      setTab('library');
+      showToast('Your movie is ready 🎬');
+    } catch (err) {
+      setGenerating(false);
+      showToast('Generation failed: ' + err.message);
+      alert('Generation failed:\n\n' + err.message);
+    }
+  }
+
+  // ---------- stitch ----------
+  const toggleSelect = (id) => setSelected(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  async function doStitch() {
+    if (selected.length < 2) return;
+    try {
+      const res = await fetch('/api/stitch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: selected }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      showToast('Stitching ' + selected.length + ' movies…');
+      await pollJob(data.jobId, selected.length).catch(e => { throw e; });
+      setSelected([]);
+      await loadLibrary();
+      showToast('Stitched movie is in your Library');
+    } catch (err) { showToast('Stitch failed: ' + err.message); }
+  }
+
+  function resetAll() {
+    setScript(VG_DEFAULT_SCRIPT); lastScript.current = '__force__';
+    setTab('script');
+  }
+
+  const tier = VG_TIERS.find(x => x.id === tierId), res = VG_RESOLUTIONS.find(x => x.id === resId);
+  const est = vgEstimate(scenes, tier, res);
+
+  // ---- nav rendering ----
+  const NavTab = ({ tb, vertical }) => {
+    const active = tab === tb.id;
+    return (
+      <button onClick={() => setTab(tb.id)} style={{
+        display: 'flex', alignItems: 'center', gap: 9,
+        padding: vertical ? '11px 14px' : '9px 15px', borderRadius: 11, border: 'none', cursor: 'pointer',
+        background: active ? theme.primary : 'transparent', color: active ? '#fff' : '#4b5563',
+        fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 14, width: vertical ? '100%' : 'auto',
+        transition: 'all .15s', boxShadow: active ? theme.glow : 'none', justifyContent: 'flex-start',
+      }}>
+        {tb.step > 0 && (
+          <span style={{ width: 20, height: 20, borderRadius: 999, background: active ? 'rgba(255,255,255,0.25)' : '#eef0f2', color: active ? '#fff' : '#9ca3af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, flexShrink: 0 }}>{tb.step}</span>
+        )}
+        <span style={{ display: 'flex' }}><VGIcon name={tb.icon} size={17} color={active ? '#fff' : '#6b7280'} /></span>{tb.label}
+      </button>
+    );
+  };
+
+  const content = (
+    <div className="vg-view" key={tab}>
+      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} goNext={() => setTab('scenes')} />}
+      {tab === 'scenes' && <ScenesView theme={theme} scenes={scenes} layout={editorLayout} onChange={updateScene} onMove={moveScene} onDelete={deleteScene} onImage={imageScene} onAdd={addScene} goBack={() => setTab('script')} goNext={() => setTab('style')} />}
+      {tab === 'style' && <StyleView theme={theme} scenes={scenes} tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} styleId={styleId} setStyleId={setStyleId} voiceId={voiceId} setVoiceId={setVoiceId} musicId={musicId} setMusicId={setMusicId} goBack={() => setTab('scenes')} goNext={() => setTab('review')} />}
+      {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} generating={generating} progress={progress} goBack={() => setTab('style')} />}
+      {tab === 'library' && <LibraryView theme={theme} generations={generations} clipsByStory={clipsByStory} selected={selected} toggleSelect={toggleSelect} onStitch={doStitch} onNew={resetAll} />}
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: '100vh', background: theme.page, transition: 'background .3s' }}>
+      {/* ---------- HEADER ---------- */}
+      <header style={{
+        position: 'sticky', top: 0, zIndex: 30,
+        background: 'rgba(255,255,255,0.88)', backdropFilter: 'blur(12px)',
+        borderBottom: '1px solid #eef0f2', padding: '12px 24px',
+        display: 'flex', alignItems: 'center', gap: 18,
+      }}>
+        <VGLogo theme={theme} />
+        {serverOk === false
+          ? <VGPill color="#dc2626" bg="#fee2e2" style={{ marginLeft: 2 }}>● server offline — run python3 server.py</VGPill>
+          : <VGPill color="#15803d" bg="#dcfce7" style={{ marginLeft: 2 }}>● server ready</VGPill>}
+        {!sidebar && (
+          <nav style={{ display: 'flex', gap: 4, background: '#f5f6f8', padding: 5, borderRadius: 14, margin: '0 auto' }}>
+            {TABS.filter(x => x.id !== 'library').map(tb => <NavTab key={tb.id} tb={tb} />)}
+            <div style={{ width: 1, background: '#e2e4e8', margin: '4px 5px' }} />
+            <NavTab tb={TABS.find(x => x.id === 'library')} />
+          </nav>
+        )}
+        <div style={{ marginLeft: sidebar ? 'auto' : 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ textAlign: 'right', lineHeight: 1.15 }}>
+            <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>This session</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: '#374151' }}>{session.runs} runs · {vgMoney(session.cost)}</div>
+          </div>
+        </div>
+      </header>
+
+      {/* ---------- BODY ---------- */}
+      {sidebar ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '232px 1fr', alignItems: 'start' }}>
+          <aside style={{ position: 'sticky', top: 65, padding: '22px 16px', display: 'flex', flexDirection: 'column', gap: 6, height: 'calc(100vh - 65px - 60px)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9ca3af', padding: '0 8px 6px' }}>Make a movie</div>
+            {TABS.filter(x => x.id !== 'library').map(tb => <NavTab key={tb.id} tb={tb} vertical />)}
+            <div style={{ height: 1, background: '#e8eaed', margin: '8px 8px' }} />
+            <NavTab tb={TABS.find(x => x.id === 'library')} vertical />
+            <div style={{ marginTop: 'auto', padding: 12, borderRadius: 12, background: theme.tint, fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>
+              <strong style={{ color: theme.primaryDark }}>{scenes.length} scenes</strong> · ~{est.seconds}s<br/>Est. {vgMoney(est.cost)}
+            </div>
+          </aside>
+          <main style={{ padding: '28px 32px 96px', minWidth: 0 }}>{content}</main>
+        </div>
+      ) : (
+        <main style={{ padding: '30px 32px 96px' }}>{content}</main>
+      )}
+
+      {/* ---------- BOTTOM CONTROL DOCK ---------- */}
+      <BottomDock theme={theme} prefs={prefs} setPref={setPref} />
+
+      {/* ---------- TOAST ---------- */}
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 60,
+          background: '#0f1419', color: '#fff', padding: '12px 20px', borderRadius: 999, fontWeight: 700, fontSize: 14,
+          boxShadow: '0 12px 32px rgba(0,0,0,0.28)', animation: 'vgtoast .3s ease', maxWidth: '80vw' }}>{toast}</div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

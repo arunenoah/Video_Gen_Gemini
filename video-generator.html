@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>VideoGen — AI Video Generator</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --text: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+    --amber: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+           border-bottom: 1px solid var(--border); position: sticky; top: 0;
+           background: var(--bg); z-index: 5; }
+  header h1 { font-size: 16px; margin: 0; }
+  .pill { font-size: 12px; padding: 3px 10px; border-radius: 999px;
+          border: 1px solid var(--border); color: var(--muted); }
+  .pill.ok { color: var(--green); border-color: var(--green); }
+  .spacer { flex: 1; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+           border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 13px; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #1f6feb; border-color: #1f6feb; }
+  button.primary:disabled { opacity: .5; cursor: not-allowed; }
+  button.danger:hover { border-color: var(--red); color: var(--red); }
+  main { display: grid; grid-template-columns: 420px 1fr; gap: 0; min-height: calc(100vh - 54px); }
+
+  /* ── form panel ── */
+  .form { border-right: 1px solid var(--border); padding: 20px; display: flex;
+          flex-direction: column; gap: 14px; }
+  label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+  textarea { width: 100%; min-height: 170px; background: var(--panel); color: var(--text);
+             border: 1px solid var(--border); border-radius: 6px; padding: 10px;
+             font: 13px/1.5 ui-monospace, monospace; resize: vertical; }
+  select { width: 100%; background: var(--panel); color: var(--text); padding: 7px;
+           border: 1px solid var(--border); border-radius: 6px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .drop { border: 1px dashed var(--border); border-radius: 6px; padding: 14px;
+          text-align: center; color: var(--muted); cursor: pointer; font-size: 12px; }
+  .drop.has { border-color: var(--green); color: var(--green); }
+  .drop img { max-width: 100%; max-height: 120px; border-radius: 4px; margin-top: 8px; }
+  .est { font-size: 12px; color: var(--amber); }
+  .hint { font-size: 11px; color: var(--muted); }
+  .modes { display: flex; gap: 6px; }
+  .modes button.active { border-color: var(--accent); color: var(--accent); }
+  .scene { background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+           padding: 8px 10px; font-size: 12px; display: flex; gap: 8px; align-items: center; }
+  .scene .sp { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+               text-overflow: ellipsis; }
+  .scene select { width: auto; font-size: 12px; padding: 4px; }
+  .scenes { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; }
+  .imgstrip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .imgstrip .thumb { position: relative; }
+  .imgstrip img { height: 64px; border-radius: 4px; border: 1px solid var(--border); display: block; }
+  .imgstrip .x { position: absolute; top: -6px; right: -6px; background: var(--red); border: none;
+                 color: #fff; border-radius: 50%; width: 18px; height: 18px; line-height: 1;
+                 padding: 0; font-size: 11px; }
+  .imgstrip .n { position: absolute; bottom: 2px; left: 4px; font-size: 10px;
+                 background: rgba(0,0,0,.65); padding: 0 4px; border-radius: 3px; }
+
+  /* ── feed ── */
+  .feed { padding: 20px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+  .statsbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+          padding: 14px; display: grid; grid-template-columns: 260px 1fr; gap: 14px; }
+  .card video { width: 260px; border-radius: 6px; background: #000; }
+  .card .body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .card .prompt { font-size: 13px; white-space: pre-wrap; word-break: break-word;
+                  max-height: 88px; overflow: hidden; }
+  .card .meta { font-size: 12px; color: var(--muted); }
+  .card .actions { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; align-items: center; }
+  .card.loading { border-color: var(--amber); }
+  .card.failed  { border-color: var(--red); }
+  .status-line { font-size: 12px; }
+  .status-line.run { color: var(--amber); }
+  .status-line.err { color: var(--red); white-space: pre-wrap; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #21262d;
+         color: var(--muted); }
+  .selbox { width: 16px; height: 16px; accent-color: var(--accent); }
+  a.dl { color: var(--accent); font-size: 12px; text-decoration: none; }
+  .empty { color: var(--muted); text-align: center; padding: 60px 0; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .form { border-right: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎬 VideoGen</h1>
+  <span class="pill" id="keyPill">checking key…</span>
+  <span class="spacer"></span>
+  <span class="pill" id="sessionPill">Session: 0 runs · $0.00</span>
+  <button id="stitchBtn" disabled>⛓ Stitch selected</button>
+  <button id="refreshBtn">↻ Refresh</button>
+</header>
+
+<main>
+  <section class="form">
+    <div class="modes">
+      <button id="modeSingle" class="active">Single clip</button>
+      <button id="modeStory">📖 Story — script → clips → stitch</button>
+    </div>
+
+    <div id="singleMode" style="display:flex;flex-direction:column;gap:14px;">
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <label for="prompt" style="margin:0">Video prompt (motion + optional Dialogue: lines — Veo generates voices)</label>
+        <button id="enhanceSingleBtn" title="Claude Haiku turns your idea (and image, if dropped) into a full animation prompt">✨ Enhance</button>
+      </div>
+      <textarea id="prompt" placeholder="3D Pixar-style animation. A subtle slow zoom...&#10;&#10;Dialogue:&#10;Dad (warm): &quot;Brrr! It's freezing outside!&quot;"></textarea>
+    </div>
+
+    <div>
+      <label>Starting frame (optional — drop image for image-to-video, omit for text-to-video)</label>
+      <div class="drop" id="drop">Drop PNG / JPEG / WebP here, or click to choose
+        <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden />
+        <div id="preview"></div>
+      </div>
+    </div>
+    </div>
+
+    <div id="storyMode" style="display:none;flex-direction:column;gap:14px;">
+      <div>
+        <label for="script">Full script — scenes split on lines starting with "Clip N", "Scene N" or "---"</label>
+        <textarea id="script" style="min-height:220px" placeholder="Clip 1 – Cold Winter Night&#10;Slow camera push toward the bed. Snow falls outside...&#10;Dialogue:&#10;Dad: &quot;Brrr! It's freezing!&quot;&#10;&#10;Clip 2 – The Mystery&#10;Daughter lifts a corner of the blanket..."></textarea>
+      </div>
+      <div>
+        <label>Scene images (drop several — auto-mapped in order, adjust per scene below)</label>
+        <div class="drop" id="storyDrop">Drop PNG / JPEG / WebP images here, or click to choose
+          <input type="file" id="storyFiles" accept="image/png,image/jpeg,image/webp" multiple hidden />
+          <div class="imgstrip" id="imgStrip"></div>
+        </div>
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <label style="margin:0">Parsed scenes</label>
+          <button id="enhanceBtn" title="Claude Haiku looks at each scene's image + script and writes the Veo animation prompt">✨ Enhance with Haiku</button>
+        </div>
+        <div class="scenes" id="scenes"><div class="hint">Paste a script above to see scenes.</div></div>
+        <div class="hint" id="enhanceStatus"></div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="tier">Model tier</label>
+        <select id="tier">
+          <option value="lite" selected>Lite — $0.05–0.08/s</option>
+          <option value="fast">Fast — $0.10–0.12/s</option>
+          <option value="quality">Quality — $0.40/s</option>
+        </select>
+      </div>
+      <div>
+        <label for="resolution">Resolution</label>
+        <select id="resolution">
+          <option value="720p" selected>720p</option>
+          <option value="1080p">1080p</option>
+        </select>
+      </div>
+      <div>
+        <label for="duration">Duration</label>
+        <select id="duration">
+          <option value="4">4 s</option>
+          <option value="6">6 s</option>
+          <option value="8" selected>8 s</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="est" id="estimate">Estimated cost: $0.40</div>
+    <button class="primary" id="generateBtn">▶ Generate video</button>
+    <div class="hint">All tiers include native audio (voices, ambience). Generation takes 1–6 min per clip.
+      Story mode generates scenes sequentially then auto-stitches the final MP4.
+      Every run is archived to <code>generations/</code> with prompt, cost and preview frames.</div>
+  </section>
+
+  <section class="feed" id="feed">
+    <div class="statsbar" id="stats"></div>
+    <div class="empty">No generations yet — write a prompt and hit Generate.</div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const PRICING = { lite: {"720p":0.05,"1080p":0.08}, fast: {"720p":0.10,"1080p":0.12}, quality: {"720p":0.40,"1080p":0.40} };
+let imageB64 = null, imageMime = null;
+let session = { runs: 0, cost: 0 };
+const activeJobs = new Map();   // jobId -> card element
+let mode = "single";
+let storyImages = [];           // [{b64, mime}] in drop order
+let sceneState = [];            // [{prompt, imageIndex, duration}]
+
+// ── mode toggle ──
+$("modeSingle").addEventListener("click", () => setMode("single"));
+$("modeStory").addEventListener("click", () => setMode("story"));
+function setMode(m) {
+  mode = m;
+  $("modeSingle").classList.toggle("active", m === "single");
+  $("modeStory").classList.toggle("active", m === "story");
+  $("singleMode").style.display = m === "single" ? "flex" : "none";
+  $("storyMode").style.display = m === "story" ? "flex" : "none";
+  $("duration").parentElement.style.visibility = m === "story" ? "hidden" : "visible";
+  $("generateBtn").textContent = m === "story" ? "▶ Generate story (all scenes + stitch)" : "▶ Generate video";
+  updateEstimate();
+}
+
+// ── cost estimate ──
+function updateEstimate() {
+  const rate = PRICING[$("tier").value][$("resolution").value];
+  let c, suffix = "";
+  if (mode === "story") {
+    const secs = sceneState.reduce((a, s) => a + s.duration, 0);
+    c = rate * secs;
+    suffix = ` (${sceneState.length} scenes · ${secs}s)`;
+  } else {
+    c = rate * Number($("duration").value);
+  }
+  $("estimate").textContent = `Estimated cost: $${c.toFixed(2)}${suffix}`;
+}
+["tier","resolution","duration"].forEach(id => $(id).addEventListener("change", updateEstimate));
+updateEstimate();
+
+// ── story: script parsing ──
+const SCENE_HEAD = /^(?:\s*-{3,}\s*|(?:clip|scene)\s*\d+.*)$/i;
+function parseScript(text) {
+  const lines = text.split("\n");
+  const blocks = []; let cur = [];
+  for (const line of lines) {
+    if (SCENE_HEAD.test(line.trim()) && cur.join("").trim()) { blocks.push(cur.join("\n").trim()); cur = []; }
+    if (!/^\s*-{3,}\s*$/.test(line)) cur.push(line);
+  }
+  if (cur.join("").trim()) blocks.push(cur.join("\n").trim());
+  return blocks.filter(Boolean);
+}
+
+let parseTimer = null;
+$("script").addEventListener("input", () => {
+  clearTimeout(parseTimer);
+  parseTimer = setTimeout(rebuildScenes, 400);
+});
+
+function rebuildScenes() {
+  const blocks = parseScript($("script").value);
+  sceneState = blocks.map((prompt, i) => ({
+    prompt,
+    imageIndex: i < storyImages.length ? i : null,
+    duration: 8,
+  }));
+  renderScenes();
+  updateEstimate();
+}
+
+function renderScenes() {
+  const box = $("scenes"); box.innerHTML = "";
+  if (!sceneState.length) {
+    const d = document.createElement("div"); d.className = "hint";
+    d.textContent = "Paste a script above to see scenes.";
+    box.append(d); return;
+  }
+  sceneState.forEach((s, i) => {
+    const row = document.createElement("div"); row.className = "scene";
+    const num = document.createElement("strong"); num.textContent = String(i + 1);
+    const sp = document.createElement("span"); sp.className = "sp";
+    sp.textContent = s.prompt.replace(/\s+/g, " ").slice(0, 90);
+    sp.title = s.prompt;
+    const imgSel = document.createElement("select");
+    const optNone = document.createElement("option");
+    optNone.value = ""; optNone.textContent = "no image (txt→vid)";
+    imgSel.append(optNone);
+    storyImages.forEach((_, j) => {
+      const o = document.createElement("option");
+      o.value = String(j); o.textContent = "img " + (j + 1);
+      imgSel.append(o);
+    });
+    imgSel.value = s.imageIndex === null ? "" : String(s.imageIndex);
+    imgSel.addEventListener("change", () => { s.imageIndex = imgSel.value === "" ? null : Number(imgSel.value); });
+    const durSel = document.createElement("select");
+    for (const d of [4, 6, 8]) {
+      const o = document.createElement("option");
+      o.value = String(d); o.textContent = d + "s";
+      durSel.append(o);
+    }
+    durSel.value = String(s.duration);
+    durSel.addEventListener("change", () => { s.duration = Number(durSel.value); updateEstimate(); });
+    row.append(num, sp, imgSel, durSel);
+    box.append(row);
+  });
+}
+
+// ── story: multi-image drop (client-side downscale to keep payloads small) ──
+const storyDrop = $("storyDrop");
+storyDrop.addEventListener("click", () => $("storyFiles").click());
+storyDrop.addEventListener("dragover", e => e.preventDefault());
+storyDrop.addEventListener("drop", e => { e.preventDefault(); addStoryFiles(e.dataTransfer.files); });
+$("storyFiles").addEventListener("change", e => addStoryFiles(e.target.files));
+
+async function addStoryFiles(files) {
+  for (const file of files) {
+    if (!["image/png","image/jpeg","image/webp"].includes(file.type)) continue;
+    if (storyImages.length >= 10) { alert("Max 10 images"); break; }
+    const b64 = await downscale(file, 2048);
+    storyImages.push({ b64, mime: "image/jpeg" });
+  }
+  renderImgStrip();
+  rebuildScenes();
+}
+
+function downscale(file, maxDim) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(img.src);
+      resolve(canvas.toDataURL("image/jpeg", 0.92));
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function renderImgStrip() {
+  const strip = $("imgStrip"); strip.innerHTML = "";
+  storyImages.forEach((im, i) => {
+    const t = document.createElement("div"); t.className = "thumb";
+    const img = document.createElement("img"); img.src = im.b64; img.alt = "img " + (i + 1);
+    const n = document.createElement("span"); n.className = "n"; n.textContent = String(i + 1);
+    const x = document.createElement("button"); x.className = "x"; x.textContent = "✕";
+    x.addEventListener("click", ev => {
+      ev.stopPropagation();
+      storyImages.splice(i, 1);
+      renderImgStrip(); rebuildScenes();
+    });
+    t.append(img, n, x);
+    strip.append(t);
+  });
+  storyDrop.classList.toggle("has", storyImages.length > 0);
+}
+
+// ── image drop ──
+const drop = $("drop");
+drop.addEventListener("click", () => $("file").click());
+drop.addEventListener("dragover", e => e.preventDefault());
+drop.addEventListener("drop", e => { e.preventDefault(); if (e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]); });
+$("file").addEventListener("change", e => { if (e.target.files[0]) loadImage(e.target.files[0]); });
+
+function loadImage(file) {
+  if (!["image/png","image/jpeg","image/webp"].includes(file.type)) { alert("PNG, JPEG or WebP only"); return; }
+  if (file.size > 20 * 1024 * 1024) { alert("Image exceeds 20 MB"); return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    imageB64 = reader.result; imageMime = file.type;
+    drop.classList.add("has");
+    $("preview").innerHTML = "";
+    const img = document.createElement("img");
+    img.src = imageB64; img.alt = "start frame";
+    const clear = document.createElement("button");
+    clear.textContent = "✕ remove"; clear.style.marginTop = "6px";
+    clear.addEventListener("click", ev => { ev.stopPropagation(); clearImage(); });
+    $("preview").append(img, clear);
+  };
+  reader.readAsDataURL(file);
+}
+function clearImage() { imageB64 = imageMime = null; drop.classList.remove("has"); $("preview").innerHTML = ""; }
+
+// ── enhance (Claude Haiku writes the animation prompt per scene) ──
+$("enhanceBtn").addEventListener("click", async () => {
+  if (!sceneState.length) { alert("Paste a script first"); return; }
+  $("enhanceBtn").disabled = true;
+  $("enhanceStatus").textContent = `✨ Haiku rewriting ${sceneState.length} scenes…`;
+  try {
+    const res = await fetch("/api/enhance", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenes: sceneState.map(s => ({ prompt: s.prompt, imageIndex: s.imageIndex })),
+        images: storyImages.map(im => ({ base64: im.b64, mime: im.mime })),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    data.prompts.forEach((p, i) => { if (sceneState[i]) sceneState[i].prompt = p; });
+    renderScenes();
+    $("enhanceStatus").textContent = "✨ Enhanced — hover a scene to read its full animation prompt. Generate uses these.";
+  } catch (err) {
+    $("enhanceStatus").textContent = "Enhance failed: " + err.message;
+  } finally {
+    $("enhanceBtn").disabled = false;
+  }
+});
+
+// ── enhance: single mode (works with OR without an image) ──
+$("enhanceSingleBtn").addEventListener("click", async () => {
+  const text = $("prompt").value.trim();
+  if (!text) { alert("Write your idea first — even one line works"); return; }
+  $("enhanceSingleBtn").disabled = true;
+  $("enhanceSingleBtn").textContent = "✨ thinking…";
+  try {
+    const hasImg = !!imageB64;
+    const res = await fetch("/api/enhance", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenes: [{ prompt: text, imageIndex: hasImg ? 0 : null }],
+        images: hasImg ? [{ base64: imageB64, mime: imageMime }] : [],
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    $("prompt").value = data.prompts[0];
+  } catch (err) {
+    alert("Enhance failed: " + err.message);
+  } finally {
+    $("enhanceSingleBtn").disabled = false;
+    $("enhanceSingleBtn").textContent = "✨ Enhance";
+  }
+});
+
+// ── generate ──
+$("generateBtn").addEventListener("click", async () => {
+  $("generateBtn").disabled = true;
+  try {
+    if (mode === "story") {
+      if (!sceneState.length) { alert("Paste a script first"); return; }
+      const res = await fetch("/api/story", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: sceneState[0].prompt.slice(0, 60),
+          tier: $("tier").value, resolution: $("resolution").value,
+          scenes: sceneState.map(s => ({ prompt: s.prompt, duration: s.duration, imageIndex: s.imageIndex })),
+          images: storyImages.map(im => ({ base64: im.b64, mime: im.mime })),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      addLoadingCard(data.jobId, `📖 Story — ${sceneState.length} scenes (est $${(data.estCost || 0).toFixed(2)})`);
+      pollJob(data.jobId);
+    } else {
+      const prompt = $("prompt").value.trim();
+      if (!prompt) { alert("Write a prompt first"); return; }
+      const res = await fetch("/api/generate", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt, tier: $("tier").value, resolution: $("resolution").value,
+          duration: Number($("duration").value),
+          imageBase64: imageB64 || undefined, imageMime: imageMime || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      addLoadingCard(data.jobId, prompt);
+      pollJob(data.jobId);
+    }
+  } catch (err) {
+    alert("Generate failed: " + err.message);
+  } finally {
+    $("generateBtn").disabled = false;
+  }
+});
+
+function addLoadingCard(jobId, prompt) {
+  const card = document.createElement("div");
+  card.className = "card loading";
+  const vid = document.createElement("div");
+  const body = document.createElement("div"); body.className = "body";
+  const p = document.createElement("div"); p.className = "prompt"; p.textContent = prompt;
+  const status = document.createElement("div"); status.className = "status-line run";
+  status.textContent = "queued…";
+  body.append(p, status);
+  card.append(vid, body);
+  card.dataset.status = status ? "1" : "";
+  card._statusEl = status;
+  $("feed").insertBefore(card, $("feed").children[1] || null);
+  activeJobs.set(jobId, card);
+}
+
+async function pollJob(jobId) {
+  const card = activeJobs.get(jobId);
+  for (;;) {
+    await new Promise(r => setTimeout(r, 4000));
+    let job;
+    try {
+      const res = await fetch("/api/job/" + jobId);
+      job = await res.json();
+      if (!res.ok) throw new Error(job.error || res.statusText);
+    } catch (err) { card._statusEl.textContent = "poll error: " + err.message; continue; }
+    if (job.status === "done") {
+      session.runs += 1; session.cost += job.cost || 0;
+      $("sessionPill").textContent = `Session: ${session.runs} runs · $${session.cost.toFixed(2)}`;
+      activeJobs.delete(jobId);
+      card.remove();
+      loadFeed();
+      return;
+    }
+    if (job.status === "failed") {
+      card.classList.remove("loading"); card.classList.add("failed");
+      card._statusEl.className = "status-line err";
+      card._statusEl.textContent = "FAILED: " + (job.detail || "unknown error");
+      activeJobs.delete(jobId);
+      return;
+    }
+    card._statusEl.textContent = (job.detail || job.status) + "…";
+  }
+}
+
+// ── feed ──
+async function loadFeed() {
+  let entries = [];
+  try {
+    const res = await fetch("/api/list");
+    entries = await res.json();
+  } catch { /* server gone */ }
+  const feed = $("feed");
+  // keep stats bar + loading cards, drop archived cards
+  [...feed.querySelectorAll(".card:not(.loading):not(.failed)"), ...feed.querySelectorAll(".empty")].forEach(n => n.remove());
+
+  let totalCost = 0, totalSec = 0;
+  for (const e of entries) {
+    totalCost += e.meta.cost || 0; totalSec += e.meta.duration || 0;
+    feed.append(renderCard(e));
+  }
+  renderStats(entries.length, totalSec, totalCost);
+  if (!entries.length && !activeJobs.size) {
+    const d = document.createElement("div"); d.className = "empty";
+    d.textContent = "No generations yet — write a prompt and hit Generate.";
+    feed.append(d);
+  }
+  updateStitchBtn();
+}
+
+function renderCard(entry) {
+  const m = entry.meta;
+  const card = document.createElement("div"); card.className = "card";
+
+  const video = document.createElement("video");
+  video.controls = true; video.preload = "metadata";
+  if (entry.thumb) video.poster = entry.thumb;
+  video.src = `/generations/${encodeURIComponent(entry.id)}/clip.mp4`;
+
+  const body = document.createElement("div"); body.className = "body";
+
+  const top = document.createElement("div");
+  top.style.cssText = "display:flex;gap:8px;align-items:center;";
+  const sel = document.createElement("input");
+  sel.type = "checkbox"; sel.className = "selbox"; sel.dataset.id = entry.id;
+  sel.title = "select for stitching";
+  sel.addEventListener("change", updateStitchBtn);
+  const tags = document.createElement("span");
+  const tagList = [m.kind === "stitch" ? "STITCHED" : (m.tier || ""), m.resolution || "", (m.duration || "?") + "s", m.hasImage ? "img→vid" : (m.kind === "stitch" ? "" : "txt→vid")].filter(Boolean);
+  for (const t of tagList) { const s = document.createElement("span"); s.className = "tag"; s.textContent = t; s.style.marginRight = "6px"; tags.append(s); }
+  top.append(sel, tags);
+
+  const p = document.createElement("div"); p.className = "prompt"; p.textContent = m.prompt || "";
+
+  const meta = document.createElement("div"); meta.className = "meta";
+  const when = (m.createdAt || "").replace("T", " ").slice(0, 16);
+  meta.textContent = `${when} · $${(m.cost || 0).toFixed(2)}${m.generationSeconds ? ` · generated in ${m.generationSeconds}s` : ""}`;
+
+  const actions = document.createElement("div"); actions.className = "actions";
+  const dl = document.createElement("a");
+  dl.className = "dl"; dl.textContent = "⬇ Download MP4";
+  dl.href = `/generations/${encodeURIComponent(entry.id)}/clip.mp4`;
+  dl.download = entry.id + ".mp4";
+  const del = document.createElement("button");
+  del.className = "danger"; del.textContent = "Delete";
+  del.addEventListener("click", async () => {
+    if (!confirm("Delete this generation and its files?")) return;
+    await fetch("/api/delete/" + encodeURIComponent(entry.id), { method: "DELETE" });
+    loadFeed();
+  });
+  actions.append(dl, del);
+
+  body.append(top, p, meta, actions);
+  card.append(video, body);
+  return card;
+}
+
+function renderStats(count, seconds, cost) {
+  const stats = $("stats"); stats.innerHTML = "";
+  for (const text of [`${count} runs`, `${seconds}s of video`, `$${cost.toFixed(2)} total`]) {
+    const s = document.createElement("span"); s.className = "pill"; s.textContent = text; stats.append(s);
+  }
+}
+
+// ── stitch ──
+function selectedIds() { return [...document.querySelectorAll(".selbox:checked")].map(b => b.dataset.id); }
+function updateStitchBtn() {
+  const n = selectedIds().length;
+  $("stitchBtn").disabled = n < 2;
+  $("stitchBtn").textContent = n >= 2 ? `⛓ Stitch ${n} clips` : "⛓ Stitch selected";
+}
+$("stitchBtn").addEventListener("click", async () => {
+  const ids = selectedIds();
+  if (ids.length < 2) return;
+  if (!confirm(`Stitch ${ids.length} clips in feed order (newest first)?\nTip: select in story order — they are stitched top-to-bottom as listed.`)) return;
+  const res = await fetch("/api/stitch", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  const data = await res.json();
+  if (!res.ok) { alert("Stitch failed: " + (data.error || res.statusText)); return; }
+  addLoadingCard(data.jobId, `Stitching ${ids.length} clips…`);
+  pollJob(data.jobId);
+});
+
+// ── key check + boot ──
+(async function boot() {
+  try {
+    const res = await fetch("/api/list");
+    if (res.ok) { $("keyPill").textContent = "server ✓"; $("keyPill").classList.add("ok"); }
+  } catch { $("keyPill").textContent = "server unreachable — run python3 server.py"; }
+  loadFeed();
+})();
+$("refreshBtn").addEventListener("click", loadFeed);
+</script>
+</body>
+</html>

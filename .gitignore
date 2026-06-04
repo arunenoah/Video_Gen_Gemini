@@ -1,0 +1,7 @@
+config.json
+generations/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/settings.local.json

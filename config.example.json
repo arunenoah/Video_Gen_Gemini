@@ -1,0 +1,6 @@
+{
+  "keys": {
+    "gemini": "PASTE_GEMINI_KEY_HERE — needs paid tier for Veo (aistudio.google.com/apikey)",
+    "anthropic": "PASTE_ANTHROPIC_KEY_HERE — sk-ant-..., used only for ✨ Enhance"
+  }
+}
