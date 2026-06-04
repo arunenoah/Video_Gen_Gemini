@@ -90,10 +90,10 @@ No database, no cloud. `meta.json` per entry is the full record: the exact promp
 | Lite (default) | `veo-3.1-lite-generate-preview` | $0.05 | $0.08 | $0.40–0.64 |
 | Standard | `veo-3.1-fast-generate-preview` | $0.10 | $0.12 | $0.80–0.96 |
 | Pro | `veo-3.1-generate-preview` | $0.40 | $0.40 | $3.20 |
-| Grok Imagine | `x-ai/grok-imagine-video` (OpenRouter) | $0.05 | — (720p max) | $0.40 |
-| Seedance 1.5 | `bytedance/seedance-1-5-pro` (OpenRouter) | ~$0.024 | ~$0.052 | $0.19–0.42 |
+| Grok Imagine | `x-ai/grok-imagine-video` (OpenRouter) | ~$0.07 | — (720p max) | ~$0.56 |
+| Seedance 1.5 | `bytedance/seedance-1-5-pro` (OpenRouter) | ~$0.052 | ~$0.117 | $0.42–0.94 |
 
-OpenRouter engines are billed by OpenRouter; the archived cost uses the API's reported `usage.cost` when available, falling back to the per-second estimate. All models generate native audio. Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
+OpenRouter engines are billed by OpenRouter; the archived cost uses the API's reported `usage.cost` when available, falling back to the per-second estimate. OpenRouter rates above are **observed billed rates** (2026-06-04 test runs incl. audio) — the listing's bare per-second price bills lower than reality. All models generate native audio. Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
 
 ### Rate limits handled end-to-end
 

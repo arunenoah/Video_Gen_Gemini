@@ -33,15 +33,17 @@ MODELS = {
         "name": "Grok Imagine Video",
         "resolutions": {"480p", "720p"},          # model maxes out at 720p
         "durations": {4, 6, 8},                    # subset valid for this app (model: 1-15s)
-        "pricing": {"480p": 0.05, "720p": 0.05},
+        # observed billed rate 2026-06-04: 4s/720p = $0.28 (listing says $0.05/s + audio)
+        "pricing": {"480p": 0.07, "720p": 0.07},
     },
     "seedance": {
         "slug": "bytedance/seedance-1-5-pro",
         "name": "Seedance 1.5 Pro",
         "resolutions": {"720p", "1080p"},
         "durations": {4, 6, 8},                    # subset valid for this app (model: 4-12s)
-        # token-priced: height*width*24/1024 tokens per second
-        "pricing": {"720p": 0.024, "1080p": 0.052},
+        # token-priced (height*width*24/1024 tokens/s); observed billed rate
+        # 2026-06-04: 4s/720p = $0.2074 → ~$0.052/s; 1080p scaled 2.25×
+        "pricing": {"720p": 0.052, "1080p": 0.117},
     },
 }
 
