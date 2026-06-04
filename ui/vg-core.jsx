@@ -57,18 +57,22 @@ const SCENE_ACCENTS = [
   { bg: '#ede9fe', fg: '#6d28d9', solid: '#8b5cf6' }, // purple
 ];
 
-// ---------- MODEL TIERS (real Veo 3.1 pricing, USD/second) ----------
+// ---------- MODEL TIERS (real pricing, USD/second) ----------
 const VG_PRICING = {
-  lite:     { '720p': 0.05, '1080p': 0.08 },
-  standard: { '720p': 0.10, '1080p': 0.12 },
-  pro:      { '720p': 0.40, '1080p': 0.40 },
+  lite:     { '720p': 0.05,  '1080p': 0.08 },
+  standard: { '720p': 0.10,  '1080p': 0.12 },
+  pro:      { '720p': 0.40,  '1080p': 0.40 },
+  grok:     { '720p': 0.05 },                      // 720p max — no 1080p
+  seedance: { '720p': 0.024, '1080p': 0.052 },
 };
 function vgRate(tierId, resId) { return (VG_PRICING[tierId] || {})[resId] || 0; }
 
 const VG_TIERS = [
-  { id: 'lite', icon: 'zap', name: 'Lite', tag: 'Quick & cheap', perSec: 0.05, api: 'lite', blurb: 'Veo 3.1 Lite — great for drafts and trying ideas.' },
-  { id: 'standard', icon: 'star', name: 'Standard', tag: 'Most popular', perSec: 0.10, api: 'fast', blurb: 'Veo 3.1 Fast — crisp motion and rich color.', popular: true },
-  { id: 'pro', icon: 'gem', name: 'Pro', tag: 'Best quality', perSec: 0.40, api: 'quality', blurb: 'Veo 3.1 — film-grade detail for the final cut.' },
+  { id: 'lite', icon: 'zap', name: 'Lite', tag: 'Quick & cheap', perSec: 0.05, api: 'lite', engine: 'Veo 3.1', blurb: 'Veo 3.1 Lite — great for drafts and trying ideas.' },
+  { id: 'standard', icon: 'star', name: 'Standard', tag: 'Most popular', perSec: 0.10, api: 'fast', engine: 'Veo 3.1', blurb: 'Veo 3.1 Fast — crisp motion and rich color.', popular: true },
+  { id: 'pro', icon: 'gem', name: 'Pro', tag: 'Best quality', perSec: 0.40, api: 'quality', engine: 'Veo 3.1', blurb: 'Veo 3.1 — film-grade detail for the final cut.' },
+  { id: 'grok', icon: 'video', name: 'Grok Imagine', tag: 'xAI · OpenRouter', perSec: 0.05, api: 'grok', engine: 'xAI', maxRes: '720p', blurb: 'xAI Grok Imagine Video — fast, expressive motion. 720p max.' },
+  { id: 'seedance', icon: 'film', name: 'Seedance 1.5', tag: 'ByteDance · OpenRouter', perSec: 0.024, api: 'seedance', engine: 'ByteDance', blurb: 'Seedance 1.5 Pro — cinematic camera moves, native lip-synced audio.' },
 ];
 
 const VG_RESOLUTIONS = [

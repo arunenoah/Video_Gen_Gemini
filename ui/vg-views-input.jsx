@@ -214,7 +214,7 @@ function SceneCard({ scene, theme, idx, count, layout, onChange, onMove, onDelet
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f4f6', borderRadius: 999, padding: '3px 5px' }} title="Veo clips are 4, 6 or 8 seconds">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f4f6', borderRadius: 999, padding: '3px 5px' }} title="Clips are 4, 6 or 8 seconds">
           <button onClick={() => onChange(scene.id, { duration: VG_DURATIONS[Math.max(0, VG_DURATIONS.indexOf(scene.duration) - 1)] })} style={durBtn}>–</button>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: '#374151', minWidth: 30, textAlign: 'center' }}>{scene.duration}s</span>
           <button onClick={() => onChange(scene.id, { duration: VG_DURATIONS[Math.min(VG_DURATIONS.length - 1, VG_DURATIONS.indexOf(scene.duration) + 1)] })} style={durBtn}>+</button>

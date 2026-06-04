@@ -23,6 +23,7 @@ from urllib import request as urllib_request
 from urllib.error import HTTPError
 
 import veo
+import openrouter_video
 
 PORT = 8767
 ROOT = Path(__file__).resolve().parent
@@ -39,6 +40,53 @@ ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 JOBS: dict[str, dict] = {}            # in-memory job state
 JOBS_LOCK = threading.Lock()
 
+# ── engine registry: tier id → provider + per-engine constraints ─────────────
+# Veo tier ids (lite/fast/quality) stay unchanged for backward compatibility.
+ENGINES = {
+    "lite":     {"provider": "veo",        "resolutions": {"720p", "1080p"}},
+    "fast":     {"provider": "veo",        "resolutions": {"720p", "1080p"}},
+    "quality":  {"provider": "veo",        "resolutions": {"720p", "1080p"}},
+    "grok":     {"provider": "openrouter", "resolutions": {"480p", "720p"}},
+    "seedance": {"provider": "openrouter", "resolutions": {"720p", "1080p"}},
+}
+DURATIONS = (4, 6, 8)                 # shared clip lengths, valid on every engine
+
+
+def validate_engine(tier: str, resolution: str) -> str | None:
+    """Returns an error message, or None when tier+resolution are valid."""
+    spec = ENGINES.get(tier)
+    if spec is None:
+        return "invalid tier"
+    if resolution not in spec["resolutions"]:
+        return f"{tier} supports {sorted(spec['resolutions'])} only"
+    return None
+
+
+def check_engine_key(tier: str) -> None:
+    """Raises RuntimeError when the engine's API key is missing."""
+    if ENGINES[tier]["provider"] == "openrouter":
+        openrouter_video.load_api_key()
+    else:
+        veo.load_api_key()
+
+
+def engine_estimate(tier: str, resolution: str, duration: int) -> float:
+    if ENGINES[tier]["provider"] == "openrouter":
+        return openrouter_video.estimate_cost(tier, resolution, duration)
+    return veo.estimate_cost(tier, resolution, duration)
+
+
+def engine_generate(tier: str, prompt: str, out_dir: Path, *, image_path: Path | None,
+                    resolution: str, duration: int, progress) -> dict:
+    """Dispatch one clip generation to the engine's provider module."""
+    if ENGINES[tier]["provider"] == "openrouter":
+        return openrouter_video.generate_clip(
+            prompt, out_dir, engine=tier, image_path=image_path,
+            resolution=resolution, duration=duration, progress=progress)
+    return veo.generate_clip(
+        prompt, out_dir, image_path=image_path,
+        tier=tier, resolution=resolution, duration=duration, progress=progress)
+
 
 def make_id(prompt: str) -> str:
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -54,11 +102,10 @@ def job_update(job_id: str, **fields) -> None:
 def run_generation(job_id: str, gen_id: str, payload: dict, image_path: Path | None) -> None:
     out_dir = GENERATIONS / gen_id
     try:
-        meta = veo.generate_clip(
-            payload["prompt"], out_dir,
+        meta = engine_generate(
+            payload["tier"], payload["prompt"], out_dir,
             image_path=image_path,
-            tier=payload["tier"], resolution=payload["resolution"],
-            duration=payload["duration"],
+            resolution=payload["resolution"], duration=payload["duration"],
             progress=lambda msg: job_update(job_id, status="running", detail=msg),
         )
         meta.update({
@@ -149,11 +196,10 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
             prefix = f"clip {i + 1}/{n_total}: "
             idx = scene.get("imageIndex")
             img = image_paths[idx] if idx is not None else None
-            meta = veo.generate_clip(
-                scene["prompt"], GENERATIONS / cid,
+            meta = engine_generate(
+                payload["tier"], scene["prompt"], GENERATIONS / cid,
                 image_path=img,
-                tier=payload["tier"], resolution=payload["resolution"],
-                duration=scene["duration"],
+                resolution=payload["resolution"], duration=scene["duration"],
                 progress=lambda msg, p=prefix: job_update(job_id, status="running", detail=p + msg),
             )
             meta.update({
@@ -280,6 +326,7 @@ def enhance_scene(api_key: str, scene_text: str, image_b64: str | None, image_mi
 def _redact(text: str) -> str:
     """Strip anything that looks like an API key or key query param."""
     text = re.sub(r"key=[^&\s\"']+", "key=REDACTED", text)
+    text = re.sub(r"\bsk-or-[A-Za-z0-9_\-]+\b", "REDACTED", text)
     return re.sub(r"\b(AIza[0-9A-Za-z_\-]{10,}|AQ\.[0-9A-Za-z_\-]{10,})\b", "REDACTED", text)
 
 
@@ -354,8 +401,9 @@ class Handler(SimpleHTTPRequestHandler):
             duration = 0
         if not prompt or len(prompt) > 8000:
             return self._json(400, {"error": "prompt required (max 8000 chars)"})
-        if tier not in veo.MODELS or resolution not in ("720p", "1080p") or duration not in (4, 6, 8):
-            return self._json(400, {"error": "invalid tier/resolution/duration"})
+        engine_err = validate_engine(tier, resolution)
+        if engine_err or duration not in DURATIONS:
+            return self._json(400, {"error": engine_err or "invalid duration"})
 
         gen_id = make_id(prompt)
         image_path = None
@@ -378,13 +426,13 @@ class Handler(SimpleHTTPRequestHandler):
             image_path.write_bytes(raw)
 
         try:
-            veo.load_api_key()
+            check_engine_key(tier)
         except RuntimeError as exc:
             return self._json(503, {"error": str(exc)})
 
         job_id = uuid.uuid4().hex
         job_update(job_id, status="queued", detail="queued", genId=None,
-                   estCost=veo.estimate_cost(tier, resolution, duration))
+                   estCost=engine_estimate(tier, resolution, duration))
         args = {"prompt": prompt, "tier": tier, "resolution": resolution, "duration": duration}
         threading.Thread(target=run_generation, args=(job_id, gen_id, args, image_path),
                          daemon=True).start()
@@ -397,8 +445,9 @@ class Handler(SimpleHTTPRequestHandler):
 
         tier = str(payload.get("tier", "lite"))
         resolution = str(payload.get("resolution", "720p"))
-        if tier not in veo.MODELS or resolution not in ("720p", "1080p"):
-            return self._json(400, {"error": "invalid tier/resolution"})
+        engine_err = validate_engine(tier, resolution)
+        if engine_err:
+            return self._json(400, {"error": engine_err})
 
         raw_scenes = payload.get("scenes") or []
         raw_images = payload.get("images") or []
@@ -416,7 +465,7 @@ class Handler(SimpleHTTPRequestHandler):
                 duration = int(s.get("duration", 8))
             except (TypeError, ValueError):
                 duration = 0
-            if duration not in (4, 6, 8):
+            if duration not in DURATIONS:
                 return self._json(400, {"error": f"scene {i + 1}: duration must be 4, 6 or 8"})
             idx = s.get("imageIndex", None)
             if idx is not None:
@@ -450,13 +499,13 @@ class Handler(SimpleHTTPRequestHandler):
             image_paths.append(path)
 
         try:
-            veo.load_api_key()
+            check_engine_key(tier)
         except RuntimeError as exc:
             shutil.rmtree(out_dir, ignore_errors=True)
             return self._json(503, {"error": str(exc)})
 
         job_id = uuid.uuid4().hex
-        est = sum(veo.estimate_cost(tier, resolution, s["duration"]) for s in scenes)
+        est = sum(engine_estimate(tier, resolution, s["duration"]) for s in scenes)
         job_update(job_id, status="queued", detail="queued", genId=None, estCost=round(est, 4))
         args = {"scenes": scenes, "tier": tier, "resolution": resolution,
                 "title": str(payload.get("title") or "")[:200]}
@@ -524,8 +573,11 @@ class Handler(SimpleHTTPRequestHandler):
         pending = meta.get("pendingScenes") or []
         if meta.get("status") != "partial" or not pending:
             return self._json(400, {"error": "story has no pending scenes"})
+        tier = meta.get("tier", "lite")
+        if tier not in ENGINES:
+            return self._json(400, {"error": "story uses an unknown engine"})
         try:
-            veo.load_api_key()
+            check_engine_key(tier)
         except RuntimeError as exc:
             return self._json(503, {"error": str(exc)})
 
@@ -533,12 +585,12 @@ class Handler(SimpleHTTPRequestHandler):
         image_paths = sorted((GENERATIONS / story_id).glob("src*"))
         args = {
             "scenes": pending,
-            "tier": meta.get("tier", "lite"),
+            "tier": tier,
             "resolution": meta.get("resolution", "720p"),
             "title": meta.get("prompt", "Story"),
         }
         job_id = uuid.uuid4().hex
-        est = sum(veo.estimate_cost(args["tier"], args["resolution"], s.get("duration", 8)) for s in pending)
+        est = sum(engine_estimate(args["tier"], args["resolution"], s.get("duration", 8)) for s in pending)
         job_update(job_id, status="queued", detail="queued", genId=None, estCost=round(est, 4))
         threading.Thread(target=run_story,
                          args=(job_id, story_id, args, image_paths),
@@ -687,8 +739,13 @@ if __name__ == "__main__":
     GENERATIONS.mkdir(exist_ok=True)
     try:
         veo.load_api_key()
-        print("API key: found")
+        print("Gemini API key (Veo): found")
     except RuntimeError as exc:
-        print(f"API key: MISSING — {exc}")
+        print(f"Gemini API key (Veo): MISSING — {exc}")
+    try:
+        openrouter_video.load_api_key()
+        print("OpenRouter API key (Grok/Seedance): found")
+    except RuntimeError as exc:
+        print(f"OpenRouter API key (Grok/Seedance): MISSING — {exc}")
     print(f"Open → http://127.0.0.1:{PORT}/")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

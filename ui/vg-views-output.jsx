@@ -35,10 +35,10 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId,
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 26, alignItems: 'start' }}>
       <div style={{ display: 'grid', gap: 24 }}>
-        {/* tiers */}
+        {/* tiers / models */}
         <section>
-          <VGOverline style={{ marginBottom: 11 }}>Quality tier</VGOverline>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <VGOverline style={{ marginBottom: 11 }}>Model & quality</VGOverline>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
             {VG_TIERS.map(t => {
               const on = tierId === t.id;
               return (
@@ -61,14 +61,16 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId,
           <div style={{ display: 'flex', gap: 10 }}>
             {VG_RESOLUTIONS.map(r => {
               const on = resId === r.id;
+              const blocked = tier.maxRes === '720p' && r.id === '1080p';
               return (
-                <button key={r.id} onClick={() => setResId(r.id)} style={{
-                  flex: 1, padding: '13px', borderRadius: 12, cursor: 'pointer', textAlign: 'center',
+                <button key={r.id} onClick={() => !blocked && setResId(r.id)} disabled={blocked}
+                  title={blocked ? `${tier.name} supports up to 720p` : undefined} style={{
+                  flex: 1, padding: '13px', borderRadius: 12, cursor: blocked ? 'not-allowed' : 'pointer', textAlign: 'center',
                   border: '2px solid ' + (on ? theme.primary : '#e5e7eb'), background: on ? theme.tint : '#fff',
-                  fontFamily: "'Instrument Sans',sans-serif", transition: 'all .15s',
+                  fontFamily: "'Instrument Sans',sans-serif", transition: 'all .15s', opacity: blocked ? 0.45 : 1,
                 }}>
                   <div style={{ fontWeight: 800, fontSize: 16, color: on ? theme.primaryDark : '#0f1419' }}>{r.label}</div>
-                  <div style={{ fontSize: 11.5, color: '#9ca3af', fontWeight: 600, marginTop: 2 }}>{r.note}{r.mult > 1 ? ` · ${r.mult}×` : ''}</div>
+                  <div style={{ fontSize: 11.5, color: '#9ca3af', fontWeight: 600, marginTop: 2 }}>{blocked ? `not on ${tier.name}` : r.note}{r.mult > 1 ? ` · ${r.mult}×` : ''}</div>
                 </button>
               );
             })}
@@ -121,7 +123,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, styleId,
           <button onClick={goBack} style={{ width: '100%', marginTop: 10, background: 'transparent', border: 'none', color: theme.primaryDark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: "'Instrument Sans',sans-serif" }}>← Back to scenes</button>
         </VGCard>
         <div style={{ fontSize: 12, color: '#9ca3af', lineHeight: 1.5, marginTop: 12, padding: '0 4px' }}>
-          Every tier includes native audio — voices and ambience. Generation takes about 1–6 min per clip.
+          All models include native audio — voices and ambience. Veo runs on your Gemini key; Grok Imagine and Seedance run via OpenRouter. Generation takes about 1–6 min per clip.
         </div>
       </div>
     </div>

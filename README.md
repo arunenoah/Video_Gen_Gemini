@@ -1,4 +1,4 @@
-# VideoGen — AI Story & Video Generator (Veo 3.1 + Claude Haiku)
+# VideoGen — AI Story & Video Generator (Veo 3.1 · Grok Imagine · Seedance 1.5 + Claude Haiku)
 
 A local browser app that turns an **idea into a finished, voiced animated video**:
 
@@ -21,8 +21,10 @@ cp config.example.json config.json                                  # once — a
 |---|---|---|---|
 | `gemini` | Veo 3.1 video generation | aistudio.google.com/apikey | **Paid** (Veo not on free tier) |
 | `anthropic` | ✍️ Story writing + ✨ prompt enhance (Claude Haiku 4.5) | console.anthropic.com | credits needed |
+| `openrouter` | Grok Imagine Video (xAI) + Seedance 1.5 Pro (ByteDance) | openrouter.ai/keys | credits needed (optional) |
 
-Key lookup order per provider: env var → `config.json` → `~/.gemini_api_key` / `~/.anthropic_api_key`.
+Key lookup order per provider: env var → `config.json` → `~/.{gemini,anthropic,openrouter}_api_key`.
+Each engine needs only its own key — Veo works without an OpenRouter key and vice versa.
 `ffmpeg` recommended (`brew install ffmpeg`) — thumbnails + stitching.
 
 Two UIs, same backend:
@@ -44,8 +46,11 @@ Browser (ui/VideoGen.html — React UMD, no build step)
 ├─ ▶  POST /api/story           story: scenes[] + images[] → returns jobId (202)
 │        │
 │        ▼  background thread (ThreadingHTTPServer — UI never blocks)
-│     veo.py → Veo 3.1 API: submit → poll → download   (per scene, sequential)
-│        │      429 quota? retry 70s/140s/210s backoff
+│     engine dispatch (tier → provider):
+│       veo.py              → Veo 3.1 (Gemini API): submit → poll → download
+│       openrouter_video.py → Grok Imagine / Seedance 1.5 Pro (OpenRouter
+│                             /api/v1/videos): submit → poll → download
+│        │      429 quota? retry 70s/140s/210s backoff (both providers)
 │        │      still limited? → stitch finished clips → status=partial
 │        ▼
 │     ffmpeg concat → generations/<id>/clip.mp4 + preview frames + meta.json
@@ -80,13 +85,15 @@ No database, no cloud. `meta.json` per entry is the full record: the exact promp
 
 ### Models & cost (USD per generated second)
 
-| Tier | Veo model | 720p | 1080p | 8s clip |
+| Tier / model | Engine | 720p | 1080p | 8s clip |
 |---|---|---|---|---|
 | Lite (default) | `veo-3.1-lite-generate-preview` | $0.05 | $0.08 | $0.40–0.64 |
 | Standard | `veo-3.1-fast-generate-preview` | $0.10 | $0.12 | $0.80–0.96 |
 | Pro | `veo-3.1-generate-preview` | $0.40 | $0.40 | $3.20 |
+| Grok Imagine | `x-ai/grok-imagine-video` (OpenRouter) | $0.05 | — (720p max) | $0.40 |
+| Seedance 1.5 | `bytedance/seedance-1-5-pro` (OpenRouter) | ~$0.024 | ~$0.052 | $0.19–0.42 |
 
-All tiers generate native audio. Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
+OpenRouter engines are billed by OpenRouter; the archived cost uses the API's reported `usage.cost` when available, falling back to the per-second estimate. All models generate native audio. Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
 
 ### Rate limits handled end-to-end
 
@@ -102,9 +109,10 @@ Veo preview models carry small daily/minute request quotas. The pipeline:
 Single-user local tool, but built as if the local network were hostile.
 
 ### Keys never reach the browser
-- API keys live **server-side only**: env var → `config.json` → `~/.{gemini,anthropic}_api_key`. The browser never sees, stores, or transmits a key — unlike typical localStorage-key tools.
+- API keys live **server-side only**: env var → `config.json` → `~/.{gemini,anthropic,openrouter}_api_key`. The browser never sees, stores, or transmits a key — unlike typical localStorage-key tools.
 - `config.json` is git-ignored **and** explicitly blocked from HTTP serving (`GET /config.json` → 404, hardcoded guard).
-- Error messages are **key-redacted** before reaching the UI (`key=…` query params and `AIza…`/`AQ.…`/`sk-ant-…` patterns stripped) — Veo download URIs embed the key, so raw errors would leak it.
+- Error messages are **key-redacted** before reaching the UI (`key=…` query params and `AIza…`/`AQ.…`/`sk-ant-…`/`sk-or-…` patterns stripped) — Veo download URIs embed the key, so raw errors would leak it.
+- OpenRouter calls hit a **hardcoded** `https://openrouter.ai` base; the poll URL is rebuilt from a regex-validated job id, and the video is downloaded only from `openrouter.ai` https URLs (SSRF guard on API-returned URLs). JSON responses and downloads are size-capped.
 - Repo hygiene: `.gitignore` covers `config.json`, `generations/`, `.venv/`; pre-push secret scans on commit.
 
 ### Network surface

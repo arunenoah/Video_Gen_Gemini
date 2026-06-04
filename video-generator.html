@@ -145,11 +145,13 @@
 
     <div class="row">
       <div>
-        <label for="tier">Model tier</label>
+        <label for="tier">Model</label>
         <select id="tier">
-          <option value="lite" selected>Lite — $0.05–0.08/s</option>
-          <option value="fast">Fast — $0.10–0.12/s</option>
-          <option value="quality">Quality — $0.40/s</option>
+          <option value="lite" selected>Veo 3.1 Lite — $0.05–0.08/s</option>
+          <option value="fast">Veo 3.1 Fast — $0.10–0.12/s</option>
+          <option value="quality">Veo 3.1 Quality — $0.40/s</option>
+          <option value="grok">Grok Imagine (xAI · OpenRouter) — $0.05/s · 720p max</option>
+          <option value="seedance">Seedance 1.5 Pro (ByteDance · OpenRouter) — ~$0.024–0.052/s</option>
         </select>
       </div>
       <div>
@@ -185,7 +187,8 @@
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
-const PRICING = { lite: {"720p":0.05,"1080p":0.08}, fast: {"720p":0.10,"1080p":0.12}, quality: {"720p":0.40,"1080p":0.40} };
+const PRICING = { lite: {"720p":0.05,"1080p":0.08}, fast: {"720p":0.10,"1080p":0.12}, quality: {"720p":0.40,"1080p":0.40},
+                  grok: {"720p":0.05}, seedance: {"720p":0.024,"1080p":0.052} };
 let imageB64 = null, imageMime = null;
 let session = { runs: 0, cost: 0 };
 const activeJobs = new Map();   // jobId -> card element
@@ -209,7 +212,12 @@ function setMode(m) {
 
 // ── cost estimate ──
 function updateEstimate() {
-  const rate = PRICING[$("tier").value][$("resolution").value];
+  // Grok Imagine tops out at 720p — snap the selector back down
+  const res = $("resolution");
+  const no1080 = !PRICING[$("tier").value]["1080p"];
+  res.querySelector('option[value="1080p"]').disabled = no1080;
+  if (no1080 && res.value === "1080p") res.value = "720p";
+  const rate = PRICING[$("tier").value][res.value] || 0;
   let c, suffix = "";
   if (mode === "story") {
     const secs = sceneState.reduce((a, s) => a + s.duration, 0);
