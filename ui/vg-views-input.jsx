@@ -3,27 +3,37 @@
    ============================================================ */
 
 // ---------- SCRIPT VIEW ----------
-function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, refImages = [], onRefImages, onRemoveRef, onWrite, writing, goNext }) {
+function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, refImages = [], onRefImages, onRemoveRef, onWrite, writing, onStoryboard, generating, tierId, setTierId, resId, setResId, aspectId, setAspectId, goNext }) {
   const fileRef = React.useRef(null);
   const refFileRef = React.useRef(null);
+  const boardRef = React.useRef(null);
   const [drag, setDrag] = React.useState(false);
   const [refDrag, setRefDrag] = React.useState(false);
+  const [boardDrag, setBoardDrag] = React.useState(false);
+  const [boardImg, setBoardImg] = React.useState(null);
+  const [boardScenes, setBoardScenes] = React.useState(0);   // 0 ⇒ all panels (≤20)
   const [idea, setIdea] = React.useState('');
   const [ideaScenes, setIdeaScenes] = React.useState(3);
   const totalDur = scenes.reduce((a, s) => a + s.duration, 0);
 
   function applyTemplate(t) { setScript(t.script); }
   function handleFiles(files) { if (files && files.length && onImages) onImages(files); }
+  async function handleBoardFile(files) {
+    const f = files && files[0];
+    if (!f) return;
+    try { setBoardImg(await vgReadImage(f)); } catch (e) { alert(e.message); }
+  }
 
   return (
     <div style={{ maxWidth: 880, margin: '0 auto', display: 'grid', gap: 22 }}>
       {/* mode toggle */}
       <div>
         <VGOverline style={{ marginBottom: 10 }}>What are we making?</VGOverline>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
           {[
             { id: 'single', icon: 'video', t: 'Single clip', d: 'One scene, one short video.' },
             { id: 'story', icon: 'layers', t: 'Story', d: 'Script → many clips → one stitched movie.' },
+            { id: 'board', icon: 'image', t: 'From image', d: 'Upload a storyboard → auto movie.' },
           ].map(m => (
             <VGCard key={m.id} theme={theme} hover active={mode === m.id} onClick={() => setMode(m.id)} style={{ padding: 16, display: 'flex', gap: 13, alignItems: 'center' }}>
               <div style={{ width: 46, height: 46, borderRadius: 13, background: mode === m.id ? theme.hero : '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -38,6 +48,135 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance
         </div>
       </div>
 
+      {/* ── FROM IMAGE: one storyboard → auto movie (Haiku vision) ── */}
+      {mode === 'board' && (
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div
+            onDragOver={e => { e.preventDefault(); setBoardDrag(true); }}
+            onDragLeave={() => setBoardDrag(false)}
+            onDrop={e => { e.preventDefault(); setBoardDrag(false); handleBoardFile(e.dataTransfer.files); }}
+            onClick={() => !generating && boardRef.current && boardRef.current.click()}
+            style={{
+              border: '2px dashed ' + (boardDrag ? theme.primary : '#d1d5db'), borderRadius: 18,
+              padding: boardImg ? 16 : '40px 24px', textAlign: 'center', cursor: generating ? 'default' : 'pointer',
+              background: boardDrag ? theme.tint : '#fafafa', transition: 'all .15s',
+            }}>
+            {boardImg ? (
+              <img src={boardImg} alt="Storyboard" style={{ maxWidth: '100%', maxHeight: 420, borderRadius: 12, display: 'block', margin: '0 auto' }} />
+            ) : (
+              <div style={{ display: 'grid', gap: 8, justifyItems: 'center', color: '#9ca3af' }}>
+                <VGIcon name="image" size={34} />
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#374151' }}>Drop your storyboard image</div>
+                <div style={{ fontSize: 13 }}>One image with all your scenes/panels — Haiku reads it, then builds the movie. PNG · JPEG · WebP.</div>
+              </div>
+            )}
+            <input ref={boardRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: 'none' }}
+              onChange={e => { handleBoardFile(e.target.files); e.target.value = ''; }} />
+          </div>
+
+          {/* engine / model picker — board mode skips the Style tab, so choose it here */}
+          <div>
+            <VGOverline style={{ marginBottom: 10 }}>Which engine builds it?</VGOverline>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
+              {VG_TIERS.map(t => {
+                const on = tierId === t.id;
+                return (
+                  <button key={t.id} onClick={() => setTierId && setTierId(t.id)} disabled={generating} style={{
+                    textAlign: 'left', padding: '12px 14px', borderRadius: 14, cursor: generating ? 'default' : 'pointer',
+                    border: '2px solid ' + (on ? theme.primary : '#e5e7eb'), background: on ? theme.tint : '#fff',
+                    fontFamily: "'Instrument Sans',sans-serif", transition: 'all .15s', opacity: generating ? 0.7 : 1,
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <VGIcon name={t.icon} size={17} color={on ? theme.primary : '#6b7280'} />
+                      <span style={{ fontWeight: 700, fontSize: 14, color: '#0f1419' }}>{t.name}</span>
+                      {t.popular && <span style={{ fontSize: 10, fontWeight: 700, color: theme.primary, background: theme.tint, padding: '1px 6px', borderRadius: 999, border: '1px solid ' + theme.primary }}>POPULAR</span>}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 3 }}>{t.tag} · ${t.perSec.toFixed(3)}/s</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* resolution + aspect (resolution capped per engine) */}
+          <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>
+            {(() => {
+              const tier = VG_TIERS.find(t => t.id === tierId) || {};
+              const veoPortrait = tier.engine === 'Veo 3.1' && aspectId === '9:16';
+              const lock720 = tier.maxRes === '720p' || veoPortrait;
+              return (
+                <React.Fragment>
+                  <div>
+                    <VGOverline style={{ marginBottom: 8 }}>Resolution</VGOverline>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {VG_RESOLUTIONS.map(r => {
+                        const disabled = generating || (lock720 && r.id === '1080p');
+                        const on = resId === r.id;
+                        return (
+                          <button key={r.id} disabled={disabled}
+                            onClick={() => !disabled && setResId && setResId(r.id)} style={{
+                            padding: '8px 16px', borderRadius: 999, cursor: disabled ? 'not-allowed' : 'pointer',
+                            border: '2px solid ' + (on ? theme.primary : '#e5e7eb'), background: on ? theme.tint : '#fff',
+                            fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 13,
+                            color: on ? theme.primaryDark : '#374151', opacity: disabled ? 0.4 : 1,
+                          }} title={disabled && r.id === '1080p' ? 'This engine/aspect is 720p only' : ''}>{r.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div>
+                    <VGOverline style={{ marginBottom: 8 }}>Aspect</VGOverline>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {VG_ASPECTS.map(a => {
+                        const on = aspectId === a.id;
+                        return (
+                          <button key={a.id} disabled={generating}
+                            onClick={() => setAspectId && setAspectId(a.id)} style={{
+                            padding: '8px 16px', borderRadius: 999, cursor: generating ? 'default' : 'pointer',
+                            border: '2px solid ' + (on ? theme.primary : '#e5e7eb'), background: on ? theme.tint : '#fff',
+                            fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 13,
+                            color: on ? theme.primaryDark : '#374151',
+                          }} title={a.note}>{a.label}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </React.Fragment>
+              );
+            })()}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', height: 44, borderRadius: 12, border: '2px solid #e5e7eb', background: '#fff' }}
+              title="Max clips to make (0 = every panel, up to 20). Each clip costs.">
+              <input type="number" min="0" max="20" value={boardScenes}
+                onChange={e => setBoardScenes(Math.max(0, Math.min(20, Number(e.target.value) || 0)))}
+                style={{ width: 44, border: 'none', outline: 'none', textAlign: 'center',
+                  fontFamily: "'Instrument Sans',sans-serif", fontWeight: 700, fontSize: 14, color: '#374151', background: 'transparent' }} />
+              <span style={{ fontSize: 12.5, color: '#9ca3af', fontWeight: 600 }}>max clips (0 = all)</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {boardImg && !generating && (
+                <button onClick={() => setBoardImg(null)} style={{
+                  padding: '8px 14px', borderRadius: 999, border: '1.5px solid #e5e7eb', background: '#fff',
+                  cursor: 'pointer', fontFamily: "'Instrument Sans',sans-serif", fontWeight: 600, fontSize: 13, color: '#6b7280' }}>
+                  Clear
+                </button>
+              )}
+              <VGButton theme={theme} size="lg" disabled={!boardImg || generating}
+                onClick={() => onStoryboard && onStoryboard(boardImg, boardScenes)}>
+                <VGIcon name="play" size={15} color="#fff" /> {generating ? 'Generating…' : 'Generate movie from image'}
+              </VGButton>
+            </div>
+          </div>
+          <div style={{ fontSize: 12.5, color: '#9ca3af', lineHeight: 1.5 }}>
+            Fully automatic: the image becomes the look reference for every clip, so characters stay consistent.
+            No script to write — read, generate, and stitch in one run.
+          </div>
+        </div>
+      )}
+
+      {mode !== 'board' && (<React.Fragment>
       {/* templates */}
       <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -208,12 +347,13 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance
         </div>
         <VGButton theme={theme} onClick={goNext} size="lg" disabled={!scenes.length}>Next: Scenes →</VGButton>
       </div>
+      </React.Fragment>)}
     </div>
   );
 }
 
 // ---------- ONE STORYBOARD SCENE CARD ----------
-function SceneCard({ scene, theme, idx, count, layout, onChange, onMove, onDelete, onImage }) {
+function SceneCard({ scene, theme, idx, count, layout, onChange, onMove, onDelete, onImage, durations = VG_DEFAULT_DURATIONS }) {
   const fileRef = React.useRef(null);
   const a = scene.accent;
   const horizontal = layout === 'list';
@@ -259,10 +399,10 @@ function SceneCard({ scene, theme, idx, count, layout, onChange, onMove, onDelet
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f4f6', borderRadius: 999, padding: '3px 5px' }} title="Clips are 4, 6 or 8 seconds">
-          <button onClick={() => onChange(scene.id, { duration: VG_DURATIONS[Math.max(0, VG_DURATIONS.indexOf(scene.duration) - 1)] })} style={durBtn}>–</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f3f4f6', borderRadius: 999, padding: '3px 5px' }} title={`Clips: ${durations.join(', ')}s`}>
+          <button onClick={() => onChange(scene.id, { duration: durations[Math.max(0, durations.indexOf(scene.duration) - 1)] })} style={durBtn}>–</button>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: '#374151', minWidth: 30, textAlign: 'center' }}>{scene.duration}s</span>
-          <button onClick={() => onChange(scene.id, { duration: VG_DURATIONS[Math.min(VG_DURATIONS.length - 1, VG_DURATIONS.indexOf(scene.duration) + 1)] })} style={durBtn}>+</button>
+          <button onClick={() => onChange(scene.id, { duration: durations[Math.min(durations.length - 1, durations.indexOf(scene.duration) + 1)] })} style={durBtn}>+</button>
         </div>
         <div style={{ flex: 1 }} />
         <button onClick={() => onMove(idx, -1)} disabled={idx === 0} style={moveBtn(idx === 0)} title="Move up"><VGIcon name="chevron-up" size={15} /></button>
@@ -278,12 +418,14 @@ function SceneCard({ scene, theme, idx, count, layout, onChange, onMove, onDelet
     </VGCard>
   );
 }
-const VG_DURATIONS = [4, 6, 8]; // the only clip lengths Veo supports
 const durBtn = { width: 24, height: 24, borderRadius: 999, border: 'none', background: '#fff', cursor: 'pointer', fontWeight: 800, fontSize: 15, color: '#374151', lineHeight: 1 };
 function moveBtn(dis) { return { width: 30, height: 30, borderRadius: 9, border: '1.5px solid #e5e7eb', background: '#fff', cursor: dis ? 'not-allowed' : 'pointer', color: '#6b7280', opacity: dis ? 0.4 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }; }
 
 // ---------- SCENES VIEW ----------
 function ScenesView({ theme, scenes, layout, onChange, onMove, onDelete, onImage, onAdd, goBack, goNext }) {
+  // engine (and its duration range) isn't picked until the Style tab, which comes after
+  // this one — offer every engine's range here; server validates the final pick per-engine.
+  const durations = VG_DURATIONS_UNION;
   const totalDur = scenes.reduce((a, s) => a + s.duration, 0);
   if (!scenes.length) {
     return (
@@ -308,7 +450,7 @@ function ScenesView({ theme, scenes, layout, onChange, onMove, onDelete, onImage
         ? { display: 'flex', flexDirection: 'column', gap: 14 }
         : { display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: 16 }}>
         {scenes.map((s, i) => (
-          <SceneCard key={s.id} scene={s} theme={theme} idx={i} count={scenes.length} layout={layout}
+          <SceneCard key={s.id} scene={s} theme={theme} idx={i} count={scenes.length} layout={layout} durations={durations}
             onChange={onChange} onMove={onMove} onDelete={onDelete} onImage={onImage} />
         ))}
       </div>

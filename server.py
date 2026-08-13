@@ -7,23 +7,36 @@ Security posture:
 - All id params validated against a strict regex (path-traversal guard).
 - Upload: MIME allow-list + size cap; request bodies capped.
 - ffmpeg invoked with array args only.
+- Optional access password (config.json keys.password): HMAC-signed session cookie
+  (HttpOnly, SameSite=Strict), login rate-limited, gates every route by default-deny.
+  Empty/unset password = auth disabled (matches this app's other optional keys).
 """
 
 import json
 import base64
+import hmac
 import os
 import re
+import secrets
 import shutil
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib import request as urllib_request
 from urllib.error import HTTPError
+from urllib.parse import parse_qs
 
 import veo
 import openrouter_video
+
+try:                                     # Pillow: crop one clean character reference from the board
+    from PIL import Image as _PILImage
+    _PILImage.MAX_IMAGE_PIXELS = 50_000_000   # decompression-bomb guard for untrusted uploads
+except Exception:                        # optional dep — feature degrades to text-only consistency
+    _PILImage = None
 
 PORT = 8767
 ROOT = Path(__file__).resolve().parent
@@ -41,6 +54,88 @@ ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 JOBS: dict[str, dict] = {}            # in-memory job state
 JOBS_LOCK = threading.Lock()
 
+# ── access password (optional — empty disables auth, matching this app's other keys) ────────
+SESSION_COOKIE = "vg_session"
+SESSION_MAX_AGE = 30 * 24 * 3600       # 30 days — family device, convenience over strict expiry
+LOGIN_WINDOW_S = 300
+LOGIN_MAX_ATTEMPTS = 10                # per source IP per window
+_LOGIN_ATTEMPTS: dict[str, list] = {}
+_LOGIN_LOCK = threading.Lock()
+
+
+def load_password() -> str:
+    """Access password: env → config.json keys.password → ~/.videogen_password. Empty = auth disabled."""
+    pw = os.environ.get("VIDEOGEN_PASSWORD", "").strip() or veo.config_key("password")
+    if not pw:
+        pw_file = Path.home() / ".videogen_password"
+        if pw_file.is_file():
+            pw = pw_file.read_text().strip()
+    return pw
+
+
+def _session_secret() -> str:
+    """HMAC signing key for session cookies — generated once, persisted into config.json."""
+    try:
+        cfg = json.loads(veo.CONFIG_PATH.read_text())
+    except Exception:
+        cfg = {}
+    secret = cfg.get("session_secret", "")
+    if not secret:
+        secret = secrets.token_hex(32)
+        cfg["session_secret"] = secret
+        veo.CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+    return secret
+
+
+def _make_session_token() -> str:
+    expiry = str(int(time.time()) + SESSION_MAX_AGE)
+    sig = hmac.new(_session_secret().encode(), expiry.encode(), "sha256").hexdigest()
+    return f"{expiry}.{sig}"
+
+
+def _session_token_valid(token: str) -> bool:
+    if not token or "." not in token:
+        return False
+    expiry, _, sig = token.partition(".")
+    if not expiry.isdigit() or int(expiry) < time.time():
+        return False
+    expected = hmac.new(_session_secret().encode(), expiry.encode(), "sha256").hexdigest()
+    return hmac.compare_digest(sig, expected)
+
+
+def _login_rate_limited(ip: str) -> bool:
+    now = time.time()
+    with _LOGIN_LOCK:
+        attempts = [t for t in _LOGIN_ATTEMPTS.get(ip, []) if now - t < LOGIN_WINDOW_S]
+        _LOGIN_ATTEMPTS[ip] = attempts
+        return len(attempts) >= LOGIN_MAX_ATTEMPTS
+
+
+def _record_login_attempt(ip: str) -> None:
+    with _LOGIN_LOCK:
+        _LOGIN_ATTEMPTS.setdefault(ip, []).append(time.time())
+
+
+LOGIN_PAGE = """<!doctype html><html><head><meta charset="utf-8">
+<title>VideoGen — Sign in</title>
+<style>
+body{{font-family:'Instrument Sans',-apple-system,sans-serif;background:#f7f8fa;display:flex;
+align-items:center;justify-content:center;height:100vh;margin:0}}
+form{{background:#fff;padding:32px;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.08);width:280px}}
+h1{{font-size:18px;margin:0 0 16px;color:#0f1419}}
+input{{width:100%;padding:10px;border:1.5px solid #e5e7eb;border-radius:8px;font-size:14px;
+box-sizing:border-box;margin-bottom:12px}}
+button{{width:100%;padding:10px;border:none;border-radius:8px;background:#177bb5;color:#fff;
+font-weight:700;cursor:pointer}}
+.err{{color:#dc2626;font-size:13px;margin:0 0 12px}}
+</style></head><body>
+<form method="POST" action="/login">
+<h1>VideoGen for Kids</h1>
+{error}
+<input type="password" name="password" placeholder="Password" autofocus>
+<button type="submit">Sign in</button>
+</form></body></html>"""
+
 # ── engine registry: tier id → provider + per-engine constraints ─────────────
 # Veo tier ids (lite/fast/quality) stay unchanged for backward compatibility.
 ENGINES = {
@@ -49,9 +144,18 @@ ENGINES = {
     "quality":  {"provider": "veo",        "resolutions": {"720p", "1080p"}},
     "grok":     {"provider": "openrouter", "resolutions": {"480p", "720p"}},
     "seedance": {"provider": "openrouter", "resolutions": {"720p", "1080p"}},
+    "seedance-fast": {"provider": "openrouter", "resolutions": {"720p", "1080p"}},
+    "seedance-mini": {"provider": "openrouter", "resolutions": {"480p", "720p"}},
 }
-DURATIONS = (4, 6, 8)                 # shared clip lengths, valid on every engine
+DURATIONS = (4, 6, 8)                 # Veo's hard limit — Veo API rejects anything else
 ASPECTS = ("16:9", "9:16")            # landscape / portrait (Shorts, Reels)
+
+
+def valid_duration(tier: str, duration: int) -> bool:
+    """Veo tiers are locked to 4/6/8s; OpenRouter engines use their own model range."""
+    if ENGINES.get(tier, {}).get("provider") == "openrouter":
+        return duration in openrouter_video.MODELS.get(tier, {}).get("durations", DURATIONS)
+    return duration in DURATIONS
 
 
 def validate_engine(tier: str, resolution: str, aspect: str = "16:9") -> str | None:
@@ -307,6 +411,31 @@ RESTRUCTURE_SYSTEM = (
 )
 
 
+STORYBOARD_SYSTEM = (
+    "You are a storyboard reader for AI video generation. The user gives you ONE image that "
+    "contains a multi-panel storyboard / shot list (panels arranged top-to-bottom or in a grid). "
+    "Read every panel in order and turn each into one animation scene. "
+    "Return ONLY valid JSON — no markdown, no commentary — in exactly this shape:\n"
+    '{"title": "<short movie title>", "style": "<global look + cast + voice bible>", '
+    '"char_box": [x0, y0, x1, y1], "scenes": [{"prompt": "<scene action prompt>"}, ...]}\n'
+    '"char_box" = the fractional coordinates (0..1, x0<x1, y0<y1) of a TIGHT crop around just the '
+    "main characters' faces and upper bodies in their clearest, most front-facing group close-up. "
+    "Make it as SMALL as possible while still including every main character — exclude scenery, "
+    "wide backgrounds, title cards and ANY printed text/captions. Prefer a mid-story panel over the "
+    "title/ending panel. This crop becomes the character reference so they look identical in every clip.\n"
+    'The "style" string (2-4 sentences) is the consistency lock that will be applied to EVERY clip: '
+    "name the art style (e.g. '3D Pixar-style animation, warm cinematic lighting'), describe each "
+    "recurring character's FIXED look (hair, clothing, colors, age), and name ONE narrator voice to use "
+    'throughout (e.g. \'a warm female narrator\'). '
+    'Each scene "prompt" (2-4 sentences): the present-tense visual ACTION of that panel only — what '
+    "moves, the camera, the mood — animatable in 6-8 seconds, plus any spoken line as "
+    'Dialogue: {Speaker}: "{short line}".  '
+    "Describe only what HAPPENS in the scene. NEVER mention panels, grids, frame numbers, captions, "
+    "labels, diagrams or any text printed on the storyboard — those must not appear in the video. "
+    "One JSON scene per panel, in top-to-bottom order. Output JSON only."
+)
+
+
 def _haiku(api_key: str, system: str, content: list) -> str:
     """One Claude Haiku call. content = Anthropic messages content blocks."""
     body = json.dumps({
@@ -405,6 +534,13 @@ class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         if not self._host_ok():
             return
+        if self.path == "/login":
+            return self._login_get()
+        if not self._authed():
+            self.send_response(302)
+            self.send_header("Location", "/login")
+            self.end_headers()
+            return
         # config.json holds API keys — server-side only, never served over HTTP
         if self.path.split("?", 1)[0] == "/config.json":
             return self.send_error(404)
@@ -425,6 +561,12 @@ class Handler(SimpleHTTPRequestHandler):
     def do_POST(self):
         if not self._host_ok():
             return
+        if self.path == "/login":
+            return self._login_post()
+        if self.path == "/logout":
+            return self._logout()
+        if not self._authed():
+            return self._json(401, {"error": "unauthorized"})
         if self.path == "/api/generate":
             return self._generate()
         if self.path == "/api/story":
@@ -437,6 +579,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._write_story()
         if self.path == "/api/restructure":
             return self._restructure()
+        if self.path == "/api/storyboard":
+            return self._storyboard()
         if self.path == "/api/stitch":
             return self._stitch()
         self.send_error(404)
@@ -444,6 +588,8 @@ class Handler(SimpleHTTPRequestHandler):
     def do_DELETE(self):
         if not self._host_ok():
             return
+        if not self._authed():
+            return self._json(401, {"error": "unauthorized"})
         if self.path.startswith("/api/delete/"):
             return self._delete(self.path[len("/api/delete/"):])
         self.send_error(404)
@@ -465,7 +611,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not prompt or len(prompt) > 8000:
             return self._json(400, {"error": "prompt required (max 8000 chars)"})
         engine_err = validate_engine(tier, resolution, aspect)
-        if engine_err or duration not in DURATIONS:
+        if engine_err or not valid_duration(tier, duration):
             return self._json(400, {"error": engine_err or "invalid duration"})
 
         gen_id = make_id(prompt)
@@ -538,8 +684,8 @@ class Handler(SimpleHTTPRequestHandler):
                 duration = int(s.get("duration", 8))
             except (TypeError, ValueError):
                 duration = 0
-            if duration not in DURATIONS:
-                return self._json(400, {"error": f"scene {i + 1}: duration must be 4, 6 or 8"})
+            if not valid_duration(tier, duration):
+                return self._json(400, {"error": f"scene {i + 1}: invalid duration for {tier}"})
             idx = s.get("imageIndex", None)
             if idx is not None:
                 if not isinstance(idx, int) or not (0 <= idx < len(raw_images)):
@@ -663,6 +809,196 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as exc:
             return self._json(502, {"error": _redact(str(exc))[:300]})
         self._json(200, {"script": script})
+
+    def _storyboard(self):
+        """Image → movie: Haiku vision reads a storyboard image into scenes, then auto-generates.
+
+        The storyboard is read (vision) but NOT used as a reference frame — every clip is
+        text-to-video, with a shared style/cast/voice bible prepended to each prompt for
+        consistency. Feeding the image to the engine bleeds it onto each clip's first frame.
+
+        Security: image is MIME/size/base64 validated (same as _story); the Haiku JSON output is
+        treated as hostile — length-capped, try/except parsed, shape-validated, and only the
+        `style`/`prompt` strings are read (no dict spread, no user keys reach the path or engine).
+        """
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+
+        tier = str(payload.get("tier", "lite"))
+        resolution = str(payload.get("resolution", "720p"))
+        aspect = str(payload.get("aspect", "16:9"))
+        engine_err = validate_engine(tier, resolution, aspect)
+        if engine_err:
+            return self._json(400, {"error": engine_err})
+
+        # optional hard cap on how many panels we turn into clips (cost guard)
+        try:
+            max_scenes = int(payload.get("scenes", MAX_SCENES))
+        except (TypeError, ValueError):
+            max_scenes = MAX_SCENES
+        max_scenes = max(1, min(max_scenes, MAX_SCENES))
+        try:
+            duration = int(payload.get("duration", 8))
+        except (TypeError, ValueError):
+            duration = 8
+        if not valid_duration(tier, duration):
+            duration = 8
+
+        # ── validate the storyboard image (identical posture to _story src images) ──
+        mime = str(payload.get("imageMime", "")).lower()
+        b64 = payload.get("imageBase64") or ""
+        if mime not in IMAGE_MIMES:
+            return self._json(400, {"error": f"image type must be one of {sorted(IMAGE_MIMES)}"})
+        if "," in b64:
+            b64 = b64.split(",", 1)[1]
+        try:
+            raw = base64.b64decode(b64, validate=True)
+        except Exception:
+            return self._json(400, {"error": "invalid base64 image"})
+        if not raw or len(raw) > 20 * 1024 * 1024:
+            return self._json(400, {"error": "image required (max 20 MB)"})
+
+        try:
+            api_key = load_anthropic_key()
+        except RuntimeError as exc:
+            return self._json(503, {"error": str(exc)})
+
+        # ── Haiku vision: storyboard image → JSON scenes ──
+        content = [{"type": "image", "source": {
+            "type": "base64", "media_type": mime, "data": b64}},
+            {"type": "text", "text": "Read this storyboard image and return the scenes JSON."}]
+        try:
+            reply = _haiku(api_key, STORYBOARD_SYSTEM, content)
+        except Exception as exc:
+            return self._json(502, {"error": _redact(str(exc))[:300]})
+
+        # ── parse the LLM output defensively (hostile until proven otherwise) ──
+        scenes, title, char_box = self._parse_storyboard_reply(reply, max_scenes, duration)
+        if not scenes:
+            return self._json(422, {"error": "could not read any scenes from the image"})
+
+        # ── persist the storyboard for the record, and crop ONE clean all-characters shot to use as
+        # the visual character reference for every clip (input_references / Veo ASSET — not shown on
+        # screen, square-ish so within the 0.40–2.50 aspect window). The full board is never fed to
+        # the engine — that bled the whole collage onto each clip's first frame. Look consistency =
+        # this character crop + the style/cast/voice text baked into each prompt. ──
+        story_id = make_id("board-" + (title or "storyboard"))
+        out_dir = GENERATIONS / story_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"source.{IMAGE_MIMES[mime]}").write_bytes(raw)
+        char_ref = self._crop_char_reference(raw, char_box, out_dir / "ref01.jpg")
+        ref_paths = [char_ref] if char_ref else []
+
+        try:
+            check_engine_key(tier)
+        except RuntimeError as exc:
+            shutil.rmtree(out_dir, ignore_errors=True)
+            return self._json(503, {"error": str(exc)})
+
+        job_id = uuid.uuid4().hex
+        est = sum(engine_estimate(tier, resolution, s["duration"]) for s in scenes)
+        job_update(job_id, status="queued", detail="queued", genId=None, estCost=round(est, 4))
+        args = {"scenes": scenes, "tier": tier, "resolution": resolution, "aspect": aspect,
+                "title": (title or "Storyboard")[:200]}
+        # text-to-video per clip, with the cropped character reference applied to all (no start frame)
+        threading.Thread(target=run_story, args=(job_id, story_id, args, []),
+                         kwargs={"ref_paths": ref_paths}, daemon=True).start()
+        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4),
+                         "sceneCount": len(scenes), "title": title, "hasCharRef": bool(ref_paths)})
+
+    @staticmethod
+    def _parse_storyboard_reply(reply: str, max_scenes: int, duration: int):
+        """LLM text → (scenes, title, char_box). Returns ([], '', None) on any problem.
+
+        The global `style` (art/cast/voice bible) is prepended to EVERY scene prompt, and `char_box`
+        (fractional crop of the cleanest all-characters shot) becomes a visual reference fed to every
+        clip — together they keep characters and narrator voice consistent without bleeding the whole
+        storyboard onto each clip's first frame.
+
+        Hardened: caps length before json.loads, tolerates code-fence wrapping, validates the shape,
+        and copies ONLY the prompt/style strings + a numeric char_box (no dict spread — injected keys
+        are dropped; char_box is range-checked, never used as a path)."""
+        if not reply or len(reply) > 32 * 1024:
+            return [], "", None
+        text = reply.strip()
+        if text.startswith("```"):                      # strip ```json … ``` fences if present
+            text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
+            text = re.sub(r"\n?```$", "", text).strip()
+        # fall back to the first {...} block if the model added stray prose
+        if not text.startswith("{"):
+            m = re.search(r"\{.*\}", text, re.DOTALL)
+            if m:
+                text = m.group(0)
+        try:
+            data = json.loads(text)
+        except Exception:
+            return [], "", None
+        if not isinstance(data, dict):
+            return [], "", None
+        title = str(data.get("title", "")).strip()[:200]
+        style = str(data.get("style", "")).strip()[:1500]   # global look/cast/voice lock
+        char_box = Handler._sanitize_box(data.get("char_box"))
+        raw_scenes = data.get("scenes")
+        if not isinstance(raw_scenes, list):
+            return [], "", None
+        # appended to every clip so on-storyboard text/labels never get rendered into the video
+        no_text = "No text overlays, captions, frame numbers, labels, logos or watermarks."
+        scenes = []
+        for s in raw_scenes[:max_scenes]:
+            action = str((s or {}).get("prompt", "")).strip()[:6000] if isinstance(s, dict) else ""
+            if not action:
+                continue
+            prompt = (style + "\n\n" + action) if style else action
+            prompt = (prompt + "\n\n" + no_text)[:8000]
+            scenes.append({"prompt": prompt, "duration": duration, "imageIndex": None})
+        return scenes, title, char_box
+
+    @staticmethod
+    def _sanitize_box(box):
+        """LLM char_box → 4 floats in [0,1] with x0<x1, y0<y1 and a sane minimum size, else None."""
+        if not isinstance(box, (list, tuple)) or len(box) != 4:
+            return None
+        try:
+            x0, y0, x1, y1 = (float(v) for v in box)
+        except (TypeError, ValueError):
+            return None
+        x0, y0, x1, y1 = (max(0.0, min(1.0, v)) for v in (x0, y0, x1, y1))
+        if x1 - x0 < 0.05 or y1 - y0 < 0.05:        # too small to be a useful reference
+            return None
+        return (x0, y0, x1, y1)
+
+    @staticmethod
+    def _crop_char_reference(raw: bytes, char_box, out_path: Path):
+        """Crop the cleanest all-characters region → a clean reference image. Returns out_path or None.
+
+        Re-encodes to JPEG (strips any malicious metadata), clamps aspect into OpenRouter's 0.40–2.50
+        window, and caps the dimension to keep the payload small. char_box is numeric+range-checked
+        upstream and is NEVER used to build a path — only pixel offsets."""
+        if _PILImage is None or not char_box:
+            return None
+        try:
+            import io
+            im = _PILImage.open(io.BytesIO(raw)).convert("RGB")
+            W, H = im.size
+            x0, y0, x1, y1 = char_box
+            L, T = int(x0 * W), int(y0 * H)
+            R, B = int(x1 * W), int(y1 * H)
+            L, T = max(0, min(L, W - 2)), max(0, min(T, H - 2))
+            R, B = max(L + 1, min(R, W)), max(T + 1, min(B, H))
+            crop = im.crop((L, T, R, B))
+            w, h = crop.size
+            ar = w / h
+            if ar > 2.5:                                  # too wide → trim sides
+                nw = int(h * 2.5); x = (w - nw) // 2; crop = crop.crop((x, 0, x + nw, h))
+            elif ar < 0.4:                                # too tall → trim top/bottom
+                nh = int(w / 0.4); y = (h - nh) // 2; crop = crop.crop((0, y, w, y + nh))
+            crop.thumbnail((1024, 1024))
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            crop.save(out_path, "JPEG", quality=90)
+            return out_path
+        except Exception:
+            return None
 
     def _story_resume(self):
         """Generate the pendingScenes of a partial story, then re-stitch the whole movie."""
@@ -819,6 +1155,11 @@ class Handler(SimpleHTTPRequestHandler):
         return False
 
     def _json_body(self):
+        # require the real content-type: closes the classic CSRF bypass where a plain
+        # <form enctype="text/plain"> POST (no preflight) smuggles a JSON-shaped body.
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            return None
         try:
             length = int(self.headers.get("Content-Length", 0))
         except ValueError:
@@ -831,6 +1172,66 @@ class Handler(SimpleHTTPRequestHandler):
             return data if isinstance(data, dict) else {}
         except Exception:
             return {}
+
+    def _get_cookie(self, name: str) -> str:
+        raw = self.headers.get("Cookie", "")
+        for part in raw.split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == name:
+                return v
+        return ""
+
+    def _authed(self) -> bool:
+        pw = load_password()
+        if not pw:
+            return True    # no password configured — auth disabled (see README)
+        return _session_token_valid(self._get_cookie(SESSION_COOKIE))
+
+    def _login_get(self):
+        body = LOGIN_PAGE.format(error="").encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _login_render(self, code: int, error: str):
+        body = LOGIN_PAGE.format(error=f'<p class="err">{error}</p>').encode("utf-8")
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _login_post(self):
+        ip = self.client_address[0]
+        if _login_rate_limited(ip):
+            return self._login_render(429, "Too many attempts — try again in a few minutes.")
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            length = 0
+        if length > 4096:      # a password field is tiny
+            return self._login_render(400, "Invalid request.")
+        raw = self.rfile.read(length) if length else b""
+        form = parse_qs(raw.decode("utf-8", "replace"))
+        submitted = (form.get("password") or [""])[0]
+        pw = load_password()
+        if not pw or not hmac.compare_digest(submitted, pw):
+            _record_login_attempt(ip)
+            return self._login_render(401, "Incorrect password.")
+        token = _make_session_token()
+        self.send_response(302)
+        self.send_header("Location", "/")
+        self.send_header("Set-Cookie",
+            f"{SESSION_COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict; Max-Age={SESSION_MAX_AGE}")
+        self.end_headers()
+
+    def _logout(self):
+        self.send_response(302)
+        self.send_header("Location", "/login")
+        self.send_header("Set-Cookie", f"{SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
+        self.end_headers()
 
     def _json(self, code: int, payload: dict):
         body = json.dumps(payload).encode("utf-8")
@@ -856,5 +1257,10 @@ if __name__ == "__main__":
         print("OpenRouter API key (Grok/Seedance): found")
     except RuntimeError as exc:
         print(f"OpenRouter API key (Grok/Seedance): MISSING — {exc}")
+    if load_password():
+        print("Access password: set — sign-in required")
+    else:
+        print("Access password: not set — app is OPEN to anyone who can reach this port "
+              "(add keys.password to config.json to require sign-in)")
     print(f"Open → http://127.0.0.1:{PORT}/")
     ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

@@ -40,10 +40,26 @@ MODELS = {
         "slug": "bytedance/seedance-1-5-pro",
         "name": "Seedance 1.5 Pro",
         "resolutions": {"720p", "1080p"},
-        "durations": {4, 6, 8},                    # subset valid for this app (model: 4-12s)
+        "durations": set(range(4, 13)),             # model supports 4-12s, verified live at 5s
         # token-priced (height*width*24/1024 tokens/s); observed billed rate
         # 2026-06-04: 4s/720p = $0.2074 → ~$0.052/s; 1080p scaled 2.25×
         "pricing": {"720p": 0.052, "1080p": 0.117},
+    },
+    "seedance-fast": {
+        "slug": "bytedance/seedance-2.0-fast",
+        "name": "Seedance 2.0 Fast",
+        "resolutions": {"720p", "1080p"},           # reusing 1.5 Pro's range — unverified live, no published spec
+        "durations": set(range(4, 13)),             # reusing 1.5 Pro's range — unverified live, no published spec
+        # OpenRouter listing price 2026-08-13: $0.04035/s; not published per-resolution, real cost taken from usage.cost
+        "pricing": {"720p": 0.04035, "1080p": 0.04035},
+    },
+    "seedance-mini": {
+        "slug": "bytedance/seedance-2.0-mini",
+        "name": "Seedance 2.0 Mini",
+        "resolutions": {"480p", "720p"},            # per OpenRouter listing 2026-08-13 — no 1080p
+        "durations": set(range(4, 16)),             # per OpenRouter listing: 4-15s
+        # OpenRouter listing price 2026-08-13: $0.01345/s (60% off promo — may change); real cost taken from usage.cost
+        "pricing": {"480p": 0.01345, "720p": 0.01345},
     },
 }
 

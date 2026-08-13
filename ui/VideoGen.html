@@ -28,10 +28,10 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="/ui/vg-icons.jsx?v=7"></script>
-<script type="text/babel" src="/ui/vg-core.jsx?v=7"></script>
-<script type="text/babel" src="/ui/vg-views-input.jsx?v=7"></script>
-<script type="text/babel" src="/ui/vg-views-output.jsx?v=7"></script>
+<script type="text/babel" src="/ui/vg-icons.jsx?v=13"></script>
+<script type="text/babel" src="/ui/vg-core.jsx?v=13"></script>
+<script type="text/babel" src="/ui/vg-views-input.jsx?v=13"></script>
+<script type="text/babel" src="/ui/vg-views-output.jsx?v=13"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
@@ -457,6 +457,39 @@ function App() {
     }
   }
 
+  // ---------- storyboard image → movie (Haiku vision reads it, then auto-generates) ----------
+  async function doStoryboard(imgDataUrl, sceneCap) {
+    if (generating || !imgDataUrl) return;
+    setGenerating(true);
+    setProgress({ pct: 2, scene: 1, label: 'Reading your storyboard…' });
+    try {
+      const body = {
+        imageBase64: imgDataUrl,
+        imageMime: (imgDataUrl.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg',
+        tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
+        resolution: resId,
+        aspect: aspectId,
+        duration: 8,
+      };
+      if (sceneCap) body.scenes = sceneCap;   // optional cost cap; omitted ⇒ all panels (≤20)
+      const res = await fetch('/api/storyboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      showToast(`Haiku read ${data.sceneCount} scene${data.sceneCount === 1 ? '' : 's'} — generating your movie…`);
+      const job = await pollJob(data.jobId, data.sceneCount || 1);
+      setProgress({ pct: 100, scene: data.sceneCount || 1, label: 'Done!' });
+      setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
+      await loadLibrary();
+      setGenerating(false);
+      setTab('library');
+      showToast('Your movie is ready 🎬');
+    } catch (err) {
+      setGenerating(false);
+      showToast('Storyboard failed: ' + err.message);
+      alert('Storyboard failed:\n\n' + err.message);
+    }
+  }
+
   // ---------- resume a partial story (rate-limited mid-run) ----------
   async function doResume(storyId) {
     try {
@@ -527,7 +560,9 @@ function App() {
 
   const content = (
     <div className="vg-view" key={tab}>
-      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} goNext={() => setTab('scenes')} />}
+      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} onStoryboard={doStoryboard} generating={generating}
+        tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} aspectId={aspectId} setAspectId={setAspectId}
+        goNext={() => setTab('scenes')} />}
       {tab === 'scenes' && <ScenesView theme={theme} scenes={scenes} layout={editorLayout} onChange={updateScene} onMove={moveScene} onDelete={deleteScene} onImage={imageScene} onAdd={addScene} goBack={() => setTab('script')} goNext={() => setTab('style')} />}
       {tab === 'style' && <StyleView theme={theme} scenes={scenes} tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} aspectId={aspectId} setAspectId={setAspectId} styleId={styleId} setStyleId={setStyleId} voiceId={voiceId} setVoiceId={setVoiceId} musicId={musicId} setMusicId={setMusicId} goBack={() => setTab('scenes')} goNext={() => setTab('review')} />}
       {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} aspectId={aspectId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} generating={generating} progress={progress} goBack={() => setTab('style')} />}
@@ -560,6 +595,9 @@ function App() {
             <div style={{ fontSize: 11, color: '#9ca3af', fontWeight: 600 }}>This session</div>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: '#374151' }}>{session.runs} runs · {vgMoney(session.cost)}</div>
           </div>
+          <form method="POST" action="/logout" style={{ margin: 0 }}>
+            <button type="submit" style={{ border: 'none', background: 'transparent', color: '#9ca3af', fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '4px 6px' }}>Sign out</button>
+          </form>
         </div>
       </header>
 

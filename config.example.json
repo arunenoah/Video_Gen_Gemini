@@ -2,6 +2,7 @@
   "keys": {
     "gemini": "PASTE_GEMINI_KEY_HERE — needs paid tier for Veo (aistudio.google.com/apikey)",
     "anthropic": "PASTE_ANTHROPIC_KEY_HERE — sk-ant-..., used only for ✨ Enhance",
-    "openrouter": "PASTE_OPENROUTER_KEY_HERE — sk-or-..., used for Grok Imagine & Seedance (openrouter.ai/keys)"
+    "openrouter": "PASTE_OPENROUTER_KEY_HERE — sk-or-..., used for Grok Imagine & Seedance (openrouter.ai/keys)",
+    "password": "OPTIONAL — set any value here to require sign-in at http://127.0.0.1:8767/login; leave empty/absent to keep the app open (no auth)"
   }
 }

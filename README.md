@@ -14,16 +14,20 @@ Every paid artifact — written scripts, clips, stitched movies, costs, prompts,
 cd VideoGen
 python3.12 -m venv .venv && ./.venv/bin/pip install google-genai   # once
 cp config.example.json config.json                                  # once — add your keys
-./.venv/bin/python server.py                                        # http://127.0.0.1:8767
+./.venv/bin/python3 server.py                                       # http://127.0.0.1:8767
 ```
+
+Every time after: `cd VideoGen && ./.venv/bin/python3 server.py`.
+**Must use `.venv/bin/python3`** — plain `python3` on macOS resolves to the system 3.9, which crashes on `veo.py`'s `Path | None` syntax (needs 3.10+).
 
 | Key | Used for | Get it at | Required tier |
 |---|---|---|---|
 | `gemini` | Veo 3.1 video generation | aistudio.google.com/apikey | **Paid** (Veo not on free tier) |
 | `anthropic` | ✍️ Story writing + ✨ prompt enhance (Claude Haiku 4.5) | console.anthropic.com | credits needed |
-| `openrouter` | Grok Imagine Video (xAI) + Seedance 1.5 Pro (ByteDance) | openrouter.ai/keys | credits needed (optional) |
+| `openrouter` | Grok Imagine Video (xAI) + Seedance 1.5/2.0 Pro/Fast/Mini (ByteDance) | openrouter.ai/keys | credits needed (optional) |
+| `password` | 🔒 Require sign-in at `/login` | any value you pick | optional — empty/absent leaves the app open |
 
-Key lookup order per provider: env var → `config.json` → `~/.{gemini,anthropic,openrouter}_api_key`.
+Key lookup order per provider: env var → `config.json` → `~/.{gemini,anthropic,openrouter,videogen_password}` (`VIDEOGEN_PASSWORD` env / `~/.videogen_password` file for the password).
 Each engine needs only its own key — Veo works without an OpenRouter key and vice versa.
 `ffmpeg` recommended (`brew install ffmpeg`) — thumbnails + stitching.
 
@@ -92,12 +96,14 @@ No database, no cloud. `meta.json` per entry is the full record: the exact promp
 | Pro | `veo-3.1-generate-preview` | $0.40 | $0.40 | $3.20 |
 | Grok Imagine | `x-ai/grok-imagine-video` (OpenRouter) | ~$0.07 | — (720p max) | ~$0.56 |
 | Seedance 1.5 | `bytedance/seedance-1-5-pro` (OpenRouter) | ~$0.052 | ~$0.117 | $0.42–0.94 |
+| Seedance 2.0 Fast | `bytedance/seedance-2.0-fast` (OpenRouter) | ~$0.040 | ~$0.040 | ~$0.32 (unverified live) |
+| Seedance 2.0 Mini | `bytedance/seedance-2.0-mini` (OpenRouter) | ~$0.013 | — (720p max) | ~$0.20 (promo pricing, real rate observed ~2×) |
 
 OpenRouter engines are billed by OpenRouter; the archived cost uses the API's reported `usage.cost` when available, falling back to the per-second estimate. OpenRouter rates above are **observed billed rates** (2026-06-04 test runs incl. audio) — the listing's bare per-second price bills lower than reality. All models generate native audio.
 
 **Format**: 16:9 landscape (default) or 9:16 portrait for Shorts/Reels/TikTok — selectable per run in both UIs. Constraint: 9:16 on Veo is 720p only (server-enforced); Grok is 720p max everywhere; Seedance does 9:16 up to 1080p.
 
-**Character reference** (Script tab): drop a character sheet or up to 3 reference images — characters keep that exact look in every scene without the reference appearing on screen. Veo uses `reference_images` (ASSET "ingredients"); Grok/Seedance use OpenRouter `input_references`. A scene with its own starting image uses that frame instead (the two modes are mutually exclusive per clip). Clips are 4/6/8s (Veo's only lengths — UI snaps everything). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
+**Character reference** (Script tab): drop a character sheet or up to 3 reference images — characters keep that exact look in every scene without the reference appearing on screen. Veo uses `reference_images` (ASSET "ingredients"); Grok/Seedance use OpenRouter `input_references`. A scene with its own starting image uses that frame instead (the two modes are mutually exclusive per clip). Clip length: Veo is locked to 4/6/8s (hard API limit); Seedance 1.5/2.0 Fast do 4–12s, Seedance 2.0 Mini does 4–15s — the Scenes-tab stepper offers the full union since the engine isn't picked until the Style tab (server rejects a mismatched pick at generate time with a clear error). Story writing ≈ $0.005–0.01 per story (Haiku). Reference build: a 60s 7-scene story at lite/720p ≈ $3 video cost.
 
 ### Rate limits handled end-to-end
 
@@ -111,6 +117,14 @@ Veo preview models carry small daily/minute request quotas. The pipeline:
 ## Security model
 
 Single-user local tool, but built as if the local network were hostile.
+
+### Optional sign-in
+- Set `keys.password` in `config.json` (or `VIDEOGEN_PASSWORD` env / `~/.videogen_password` file) to require a password at `/login` before the app or any `/api/*`/`/generations/*` route is reachable. Leave it empty/absent to keep the app open (today's behavior, unchanged).
+- Session: HMAC-SHA256-signed cookie (`hmac.compare_digest` verification, no server-side session store), `HttpOnly` + `SameSite=Strict`, 30-day expiry. Signing key auto-generated once into `config.json` (`session_secret`, git-ignored).
+- Password comparison is `hmac.compare_digest` (constant-time) against the plaintext value in `config.json` — same trust/storage model as the other three API keys already living there (git-ignored, server-side-only file), not separately hashed.
+- Login is rate-limited: 10 failed attempts / 5 min per source IP → 429, generic error only (no "which part is wrong" hints).
+- `SameSite=Strict` plus the existing Host-header check block CSRF via cookie-riding; `_json_body()` additionally now rejects any POST whose `Content-Type` isn't exactly `application/json`, closing the classic `<form enctype="text/plain">`-no-preflight CSRF trick that (pre-existing, independent of the password feature) could otherwise hit these JSON endpoints from any web page while the server is running.
+- Sign out via the header button (posts to `/logout`, clears the cookie).
 
 ### Keys never reach the browser
 - API keys live **server-side only**: env var → `config.json` → `~/.{gemini,anthropic,openrouter}_api_key`. The browser never sees, stores, or transmits a key — unlike typical localStorage-key tools.
@@ -147,6 +161,9 @@ Single-user local tool, but built as if the local network were hostile.
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/login` | sign-in page (only route reachable without a session when a password is set) |
+| POST | `/login` | `password=` (form-encoded) → sets session cookie, redirects to `/` |
+| POST | `/logout` | clears the session cookie, redirects to `/login` |
 | POST | `/api/write-story` | `{idea, scenes:1-15}` → Haiku writes script, archives it |
 | POST | `/api/enhance` | `{scenes:[{prompt,imageIndex}], images}` → animation prompts |
 | POST | `/api/generate` | single clip `{prompt, tier, resolution, duration, imageBase64?}` |
@@ -184,6 +201,7 @@ CLI without the browser:
 | `no video returned (safety-filter…)` | Rephrase — people/children content filtered more aggressively |
 | Stitch fails | `brew install ffmpeg` |
 | Port 8767 in use | `lsof -ti:8767 \| xargs kill` |
-| UI changes not appearing | Hard refresh (⌘⇧R) — Babel-compiled JSX caches |
+| UI changes not appearing | Hard refresh (⌘⇧R) first; if the browser still serves stale JS, bump the `?v=N` query on the `<script>` tags in `ui/VideoGen.html` |
+| `python3 server.py` crashes on `Path \| None` | Wrong interpreter — use `./.venv/bin/python3 server.py`, not the system `python3` (see Quick start) |
 
 **Design divergence from the `Info/` sibling project**: Info is a synchronous stdlib proxy because its generations return in seconds and its keys live in the browser. Veo runs 1–6 min per clip, so VideoGen uses a threaded server + background jobs, the official `google-genai` SDK, and server-side-only keys — one pip dependency and a stronger key posture as deliberate trades.

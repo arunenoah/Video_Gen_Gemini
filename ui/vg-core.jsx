@@ -64,8 +64,24 @@ const VG_PRICING = {
   pro:      { '720p': 0.40,  '1080p': 0.40 },
   grok:     { '720p': 0.07 },                      // 720p max — no 1080p (observed billed rate)
   seedance: { '720p': 0.052, '1080p': 0.117 },     // observed billed rate incl. audio
+  'seedance-fast': { '720p': 0.04035, '1080p': 0.04035 },  // listing rate; not resolution-tiered, unverified live
+  'seedance-mini': { '480p': 0.01345, '720p': 0.01345 },   // listing rate 2026-08-13 (60% off promo); no 1080p
 };
 function vgRate(tierId, resId) { return (VG_PRICING[tierId] || {})[resId] || 0; }
+
+// Veo tiers are locked to 4/6/8s (hard API limit); Seedance's real range is 4-12s
+// (seedance-fast reuses 1.5 Pro's range — unconfirmed live, no docs published; seedance-mini is
+// confirmed 4-15s per its OpenRouter listing). Engine isn't chosen until the Style tab, which
+// comes AFTER Scenes — so the Scenes stepper offers the union of every engine's range;
+// server.py's valid_duration() gives the real per-engine error at generate time if the final
+// pick doesn't fit.
+const VG_DURATIONS_BY_TIER = {
+  seedance: [4, 5, 6, 7, 8, 9, 10, 11, 12],
+  'seedance-fast': [4, 5, 6, 7, 8, 9, 10, 11, 12],
+  'seedance-mini': [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+};
+const VG_DEFAULT_DURATIONS = [4, 6, 8];
+const VG_DURATIONS_UNION = [...new Set(Object.values(VG_DURATIONS_BY_TIER).flat().concat(VG_DEFAULT_DURATIONS))].sort((a, b) => a - b);
 
 const VG_TIERS = [
   { id: 'lite', icon: 'zap', name: 'Lite', tag: 'Quick & cheap', perSec: 0.05, api: 'lite', engine: 'Veo 3.1', blurb: 'Veo 3.1 Lite — great for drafts and trying ideas.' },
@@ -73,6 +89,8 @@ const VG_TIERS = [
   { id: 'pro', icon: 'gem', name: 'Pro', tag: 'Best quality', perSec: 0.40, api: 'quality', engine: 'Veo 3.1', blurb: 'Veo 3.1 — film-grade detail for the final cut.' },
   { id: 'grok', icon: 'video', name: 'Grok Imagine', tag: 'xAI · OpenRouter', perSec: 0.07, api: 'grok', engine: 'xAI', maxRes: '720p', blurb: 'xAI Grok Imagine Video — fast, expressive motion. 720p max.' },
   { id: 'seedance', icon: 'film', name: 'Seedance 1.5', tag: 'ByteDance · OpenRouter', perSec: 0.052, api: 'seedance', engine: 'ByteDance', blurb: 'Seedance 1.5 Pro — cinematic camera moves, native lip-synced audio.' },
+  { id: 'seedance-fast', icon: 'zap', name: 'Seedance 2.0 Fast', tag: 'ByteDance · OpenRouter', perSec: 0.04035, api: 'seedance-fast', engine: 'ByteDance', blurb: 'Seedance 2.0 Fast — quicker, cheaper generations, slightly lower fidelity than 1.5 Pro.' },
+  { id: 'seedance-mini', icon: 'film', name: 'Seedance 2.0 Mini', tag: 'ByteDance · OpenRouter', perSec: 0.01345, api: 'seedance-mini', engine: 'ByteDance', maxRes: '720p', blurb: 'Seedance 2.0 Mini — cheapest Seedance tier, 480p/720p only, clips up to 15s.' },
 ];
 
 const VG_RESOLUTIONS = [
@@ -330,6 +348,6 @@ function vgReadImage(file) {
 
 Object.assign(window, {
   VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
-  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgParseScript, vgMoney, vgReadImage,
+  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });
