@@ -84,7 +84,8 @@ Provider base URLs are hardcoded in config — never built from user input (SSRF
 - `GenerateClipJob`
 - `GenerateStoryJob`
 - `StitchJob`
-- `EnhanceJob`
+
+`enhance`/`write-story`/`restructure`/`storyboard` are **not** queued — the Python source (`server.py`) only backgrounds `run_generation`/`run_story`/`run_stitch` via `threading.Thread`; the text endpoints are fast synchronous Claude Haiku calls, ported as synchronous Actions in their controllers (see the Web Frontend and API Surface sections).
 
 Queue driver: Redis (Forge-supported). Each job updates its `generation_jobs` row via an atomic `DB::transaction()` + `lockForUpdate()` (or a single atomic `->update()`) to avoid races between concurrent workers. Client polls `GET /api/v1/jobs/{id}`, scoped to the authenticated user.
 
