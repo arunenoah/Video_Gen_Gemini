@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <script src="./image-slot.js"></script>
+  <style>
+    body{margin:0;background:#EDEDF0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+    ::-webkit-scrollbar{display:none}
+    textarea,input{font-family:inherit}
+    a{color:#2F5FCF}
+    a:hover{color:#6a3df0}
+  </style>
+</helmet>
+
+<div style="width:100%;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 0;box-sizing:border-box">
+<div style="width:400px;max-width:100vw;min-height:844px;background:#FFFFFF;border-radius:36px;overflow:hidden;box-shadow:0 30px 60px rgba(17,17,17,0.18);position:relative;display:flex;flex-direction:column">
+
+  <!-- status bar -->
+  <div style="flex:none;display:flex;align-items:center;justify-content:space-between;padding:14px 24px 6px;font-size:14px;font-weight:600;color:#111111">
+    <span>9:41</span>
+    <div style="display:flex;align-items:center;gap:5px">
+      <div style="width:16px;height:10px;display:flex;align-items:flex-end;gap:1.5px">
+        <div style="width:2.5px;height:4px;background:#111;border-radius:1px"></div>
+        <div style="width:2.5px;height:6px;background:#111;border-radius:1px"></div>
+        <div style="width:2.5px;height:8px;background:#111;border-radius:1px"></div>
+        <div style="width:2.5px;height:10px;background:#111;border-radius:1px"></div>
+      </div>
+      <div style="width:22px;height:11px;border:1.3px solid #111;border-radius:3px;padding:1.5px;box-sizing:border-box"><div style="width:100%;height:100%;background:#111;border-radius:1px"></div></div>
+    </div>
+  </div>
+
+  <div style="flex:1;display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding-bottom:8px">
+
+  <!-- ============ HOME ============ -->
+  <sc-if value="{{ isHome }}">
+    <div data-screen-label="Home" style="display:flex;flex-direction:column;padding:8px 20px 24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 20px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <img src="assets/app-logo.png" alt="AI Video Generator logo" style="width:30px;height:30px;object-fit:contain;flex:none"/>
+          <span style="font-size:15px;font-weight:700;color:#111111">Vidora AI</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="display:flex;align-items:center;gap:4px;background:#EAF0FB;color:#2F5FCF;padding:6px 10px;border-radius:999px;font-size:13px;font-weight:700">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="#2F5FCF"><path d="M13 2 3 14h7l-1 8 11-14h-8l1-6z"/></svg>
+            120
+          </div>
+          <div style="width:32px;height:32px;border-radius:50%;background:#DCE6F8;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#20408F">A</div>
+        </div>
+      </div>
+
+      <div style="background:#F7F7F8;border-radius:20px;padding:24px 20px;display:flex;flex-direction:column;gap:14px;margin-bottom:28px">
+        <div style="width:56px;height:56px;border-radius:16px;background:linear-gradient(135deg,#8FADE8,#2F5FCF);display:flex;align-items:center;justify-content:center;box-shadow:0 10px 24px rgba(124,77,255,0.3)">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+        </div>
+        <div>
+          <div style="font-size:22px;font-weight:800;color:#111111;line-height:1.2;letter-spacing:-0.3px">Create amazing videos with AI</div>
+          <div style="font-size:14px;color:#6B6B73;margin-top:6px;line-height:1.4">Turn your ideas, scripts and images into AI-generated videos.</div>
+        </div>
+        <button onClick="{{ startNewVideo }}" style="height:52px;background:#2F5FCF;color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;cursor:pointer;box-shadow:0 10px 22px rgba(124,77,255,0.28)">
+          <span style="font-size:18px;line-height:1">+</span> New Video
+        </button>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:17px;font-weight:700;color:#111111">Recent Projects</span>
+        <a href="#" onClick="{{ goProjects }}" style="font-size:13px;font-weight:600;text-decoration:none">View all</a>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ recentProjects }}" as="item" hint-placeholder-count="2">
+          <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E8E8EC;border-radius:16px;padding:10px;box-shadow:0 2px 8px rgba(17,17,17,0.03)">
+            <image-slot id="{{ item.slotId }}" shape="rounded" radius="12" style="width:64px;height:64px;flex:none" placeholder="Thumb"></image-slot>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14.5px;font-weight:700;color:#111111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.name }}</div>
+              <div style="font-size:12.5px;color:#6B6B73;margin-top:3px">{{ item.meta }}</div>
+            </div>
+            <button style="background:none;border:none;color:#6B6B73;cursor:pointer;padding:6px;flex:none">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+            </button>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ SCRIPT ============ -->
+  <sc-if value="{{ isScript }}">
+    <div data-screen-label="Script" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px">
+        <button onClick="{{ goHome }}" style="background:none;border:none;padding:4px;cursor:pointer;color:#111111"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <span style="font-size:16px;font-weight:700;color:#111111">Script</span>
+        <span style="font-size:12.5px;font-weight:600;color:#6B6B73">1/5</span>
+      </div>
+      <div style="height:4px;background:#E8E8EC;border-radius:2px;margin:14px 0 22px;overflow:hidden"><div style="height:100%;width:20%;background:#2F5FCF;border-radius:2px"></div></div>
+
+      <div style="font-size:15px;font-weight:700;color:#111111;margin-bottom:10px">Describe your video</div>
+      <textarea value="{{ script }}" onChange="{{ onScriptChange }}" placeholder="A tiny tree root slowly grows inside a crack in a giant rock. The camera moves underground to reveal the root pushing deeper into the crack." rows="6" style="width:100%;box-sizing:border-box;border:1.5px solid #E8E8EC;border-radius:14px;padding:14px;font-size:14.5px;color:#111111;resize:none;outline:none;background:#F7F7F8;line-height:1.5"></textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+        <sc-if value="{{ showScriptError }}"><span style="font-size:12.5px;color:#E0453C;font-weight:600">Enter a video description.</span></sc-if>
+        <sc-if value="{{ !showScriptError }}"><span></span></sc-if>
+        <span style="font-size:12px;color:#6B6B73">{{ scriptCount }} / 2000</span>
+      </div>
+
+      <button onClick="{{ improvePrompt }}" style="align-self:flex-start;margin-top:14px;background:#EAF0FB;color:#2F5FCF;border:none;border-radius:12px;padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px">Improve Prompt ✨</button>
+
+      <div style="margin-top:26px;background:#F7F7F8;border-radius:14px;padding:16px">
+        <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:10px">Tips for better results</div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <sc-for list="{{ scriptTips }}" as="tip" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#6B6B73">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2F5FCF" stroke-width="3" stroke-linecap="round"><path d="M4 12l5 5L20 6"/></svg>
+              {{ tip }}
+            </div>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="flex:1"></div>
+      <button onClick="{{ toScene }}" style="{{ nextBtnStyle }}">Next <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div>
+  </sc-if>
+
+  <!-- ============ SCENE ============ -->
+  <sc-if value="{{ isScene }}">
+    <div data-screen-label="Scene" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px">
+        <button onClick="{{ toScript }}" style="background:none;border:none;padding:4px;cursor:pointer;color:#111111"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <span style="font-size:16px;font-weight:700;color:#111111">Scene</span>
+        <span style="font-size:12.5px;font-weight:600;color:#6B6B73">2/5</span>
+      </div>
+      <div style="height:4px;background:#E8E8EC;border-radius:2px;margin:14px 0 6px;overflow:hidden"><div style="height:100%;width:40%;background:#2F5FCF;border-radius:2px"></div></div>
+      <div style="font-size:13px;color:#6B6B73;margin-bottom:16px">Select the overall look and feel</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <sc-for list="{{ styleOptions }}" as="item" hint-placeholder-count="8">
+          <button onClick="{{ item.select }}" style="{{ item.cardStyle }}">
+            <div style="{{ item.thumbStyle }}">
+              <div style="position:absolute;top:8px;left:8px;width:28px;height:28px;border-radius:9px;background:rgba(255,255,255,0.92);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 6px rgba(0,0,0,0.15)">{{ item.icon }}</div>
+              <sc-if value="{{ item.selected }}">
+                <div style="position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;background:#2F5FCF;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.25)">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg>
+                </div>
+              </sc-if>
+            </div>
+            <span style="font-size:13.5px;font-weight:700;color:#111111">{{ item.name }}</span>
+          </button>
+        </sc-for>
+      </div>
+      <sc-if value="{{ hasMoreStyles }}">
+        <button onClick="{{ toggleShowAllStyles }}" style="background:none;border:none;color:#2F5FCF;font-size:13px;font-weight:700;cursor:pointer;padding:14px 0;align-self:flex-start">{{ seeAllLabel }}</button>
+      </sc-if>
+      <sc-if value="{{ showStyleError }}"><div style="font-size:12.5px;color:#E0453C;font-weight:600;margin-top:10px">Select a scene style to continue.</div></sc-if>
+
+      <div style="flex:1;min-height:16px"></div>
+      <button onClick="{{ toReferences }}" style="{{ nextBtnStyle }}">Next <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div>
+  </sc-if>
+
+  <!-- ============ REFERENCES ============ -->
+  <sc-if value="{{ isReferences }}">
+    <div data-screen-label="References" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px">
+        <button onClick="{{ toScene }}" style="background:none;border:none;padding:4px;cursor:pointer;color:#111111"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <span style="font-size:16px;font-weight:700;color:#111111">References</span>
+        <span style="font-size:12.5px;font-weight:600;color:#6B6B73">3/5</span>
+      </div>
+      <div style="height:4px;background:#E8E8EC;border-radius:2px;margin:14px 0 18px;overflow:hidden"><div style="height:100%;width:60%;background:#2F5FCF;border-radius:2px"></div></div>
+
+      <div style="font-size:19px;font-weight:800;color:#111111;margin-bottom:6px">Add Reference Images</div>
+      <div style="font-size:13.5px;color:#6B6B73;line-height:1.5;margin-bottom:18px">Add images to help the AI maintain characters, objects, environments or visual consistency.</div>
+
+      <sc-if value="{{ !modelSupportsRefs }}">
+        <div style="background:#FFF6E9;border:1px solid #F5DCA8;color:#8A6415;font-size:12.5px;font-weight:600;padding:10px 12px;border-radius:12px;margin-bottom:16px">{{ selectedModel.name }} doesn't use reference images — uploads here will be ignored.</div>
+      </sc-if>
+
+      <div style="font-size:11.5px;font-weight:700;color:#6B6B73;margin-bottom:8px">Supported by {{ selectedModel.name }}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:18px">
+        <sc-for list="{{ refTypeChips }}" as="chip" hint-placeholder-count="5">
+          <span style="{{ chip.chipStyle }}">{{ chip.label }}</span>
+        </sc-for>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <sc-for list="{{ refSlots }}" as="item" hint-placeholder-count="5">
+          <div style="{{ item.wrapStyle }}">
+            <div style="position:relative;width:100%;aspect-ratio:1;border-radius:14px;overflow:hidden;border:1.5px solid #E8E8EC">
+              <image-slot id="{{ item.slotId }}" shape="rect" placeholder="+ Upload Image"></image-slot>
+            </div>
+            <button onClick="{{ item.cycleLabel }}" style="font-size:11.5px;font-weight:700;color:#2F5FCF;background:#EAF0FB;border:none;border-radius:999px;padding:5px 10px;align-self:flex-start;cursor:pointer">{{ item.label }}</button>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="text-align:center;font-size:12.5px;color:#6B6B73;font-weight:600;margin-top:18px">References are optional</div>
+
+      <div style="flex:1;min-height:16px"></div>
+      <button onClick="{{ toSettings }}" style="{{ nextBtnStyle }}">Next <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div>
+  </sc-if>
+
+  <!-- ============ SETTINGS ============ -->
+  <sc-if value="{{ isSettings }}">
+    <div data-screen-label="Video Settings" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px">
+        <button onClick="{{ toReferences }}" style="background:none;border:none;padding:4px;cursor:pointer;color:#111111"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <span style="font-size:16px;font-weight:700;color:#111111">Video Settings</span>
+        <span style="font-size:12.5px;font-weight:600;color:#6B6B73">4/5</span>
+      </div>
+      <div style="height:4px;background:#E8E8EC;border-radius:2px;margin:14px 0 20px;overflow:hidden"><div style="height:100%;width:80%;background:#2F5FCF;border-radius:2px"></div></div>
+
+      <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:10px">AI Model</div>
+      <button onClick="{{ toggleModelPicker }}" style="width:100%;box-sizing:border-box;height:52px;border:1.5px solid #E8E8EC;border-radius:14px;background:#F7F7F8;display:flex;align-items:center;justify-content:space-between;padding:0 14px;cursor:pointer;margin-bottom:8px">
+        <span style="font-size:14.5px;font-weight:700;color:#111111">{{ selectedModel.name }}</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6B73" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <sc-if value="{{ modelPickerOpen }}">
+        <div style="border:1.5px solid #E8E8EC;border-radius:14px;overflow:hidden;margin-bottom:8px">
+          <sc-for list="{{ modelOptions }}" as="item" hint-placeholder-count="5">
+            <button onClick="{{ item.select }}" style="{{ item.rowStyle }}">
+              <span>{{ item.name }}</span>
+              <span style="font-size:12px;color:#6B6B73;font-weight:600">{{ item.costLabel }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+      <div style="font-size:12px;color:#6B6B73;margin-bottom:22px">Estimated cost: {{ estimatedCost }} credits</div>
+
+      <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:4px">Duration</div>
+      <div style="font-size:11.5px;color:#6B6B73;margin-bottom:10px">Options limited to what {{ selectedModel.name }} supports</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px">
+        <sc-for list="{{ durationOptions }}" as="item" hint-placeholder-count="4">
+          <button onClick="{{ item.select }}" style="{{ item.chipStyle }}">{{ item.label }}</button>
+        </sc-for>
+      </div>
+
+      <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:10px">Aspect Ratio</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:22px">
+        <sc-for list="{{ aspectOptions }}" as="item" hint-placeholder-count="6">
+          <button onClick="{{ item.select }}" style="{{ item.cardStyle }}">
+            <div style="{{ item.boxStyle }}"></div>
+            <span style="font-size:12px;font-weight:700;color:#111111">{{ item.id }}</span>
+            <span style="font-size:10.5px;color:#6B6B73">{{ item.label }}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:4px">Resolution</div>
+      <div style="font-size:11.5px;color:#6B6B73;margin-bottom:10px">Options limited to what {{ selectedModel.name }} supports</div>
+      <button onClick="{{ toggleResPicker }}" style="width:100%;box-sizing:border-box;height:52px;border:1.5px solid #E8E8EC;border-radius:14px;background:#F7F7F8;display:flex;align-items:center;justify-content:space-between;padding:0 14px;cursor:pointer;margin-bottom:8px">
+        <span style="font-size:14.5px;font-weight:700;color:#111111">{{ resolution }}</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6B73" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <sc-if value="{{ resPickerOpen }}">
+        <div style="border:1.5px solid #E8E8EC;border-radius:14px;overflow:hidden;margin-bottom:16px">
+          <sc-for list="{{ resolutionOptions }}" as="item" hint-placeholder-count="3">
+            <button onClick="{{ item.select }}" style="{{ item.rowStyle }}"><span>{{ item.label }}</span></button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <button onClick="{{ toggleAdvanced }}" style="display:flex;align-items:center;justify-content:space-between;width:100%;background:#F7F7F8;border:none;border-radius:14px;padding:14px 16px;cursor:pointer;margin-top:6px">
+        <span style="font-size:14px;font-weight:700;color:#111111">Advanced Settings</span>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="{{ advancedChevronStyle }}"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+
+      <sc-if value="{{ advancedOpen }}">
+        <div style="padding:16px 4px 4px;display:flex;flex-direction:column;gap:18px">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:10px">Camera Movement</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <sc-for list="{{ cameraOptions }}" as="item" hint-placeholder-count="7">
+                <button onClick="{{ item.select }}" style="{{ item.chipStyle }}">{{ item.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:10px">Motion Intensity</div>
+            <div style="display:flex;gap:8px">
+              <sc-for list="{{ motionOptions }}" as="item" hint-placeholder-count="3">
+                <button onClick="{{ item.select }}" style="{{ item.chipStyle }}">{{ item.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:8px">Prompt Adherence</div>
+            <input type="range" min="0" max="100" value="{{ promptAdherence }}" onChange="{{ onAdherenceChange }}" style="width:100%;accent-color:#2F5FCF"/>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:8px">Seed (optional)</div>
+            <input type="text" value="{{ seed }}" onChange="{{ onSeedChange }}" placeholder="Random" style="width:100%;box-sizing:border-box;height:44px;border:1.5px solid #E8E8EC;border-radius:12px;padding:0 12px;font-size:14px;background:#F7F7F8;outline:none"/>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:#111111;margin-bottom:8px">Negative Prompt</div>
+            <textarea value="{{ negativePrompt }}" onChange="{{ onNegativeChange }}" placeholder="Things to avoid (blur, text, watermark...)" rows="2" style="width:100%;box-sizing:border-box;border:1.5px solid #E8E8EC;border-radius:12px;padding:10px 12px;font-size:14px;background:#F7F7F8;outline:none;resize:none"></textarea>
+          </div>
+          <sc-if value="{{ modelSupportsAudio }}">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <span style="font-size:13.5px;font-weight:700;color:#111111">Audio Generation</span>
+              <button onClick="{{ toggleAudio }}" style="{{ audioToggleStyle }}"><div style="{{ audioKnobStyle }}"></div></button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <div style="flex:1;min-height:16px"></div>
+      <button onClick="{{ toReview }}" style="{{ nextBtnStyle }}">Review Video <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-left:2px"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+    </div>
+  </sc-if>
+
+  <!-- ============ REVIEW ============ -->
+  <sc-if value="{{ isReview }}">
+    <div data-screen-label="Review" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 4px">
+        <button onClick="{{ toSettings }}" style="background:none;border:none;padding:4px;cursor:pointer;color:#111111"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <span style="font-size:16px;font-weight:700;color:#111111">Review &amp; Generate</span>
+        <span style="font-size:12.5px;font-weight:600;color:#6B6B73">5/5</span>
+      </div>
+      <div style="height:4px;background:#E8E8EC;border-radius:2px;margin:14px 0 20px;overflow:hidden"><div style="height:100%;width:100%;background:#2F5FCF;border-radius:2px"></div></div>
+
+      <div style="position:relative;width:100%;aspect-ratio:{{ previewAspect }};border-radius:18px;overflow:hidden;margin-bottom:20px;background:#111">
+        <image-slot id="review-preview" shape="rect" placeholder="Video preview"></image-slot>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+          <div style="width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="#111"><path d="M8 5v14l11-7z"/></svg></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ reviewRows }}" as="row" hint-placeholder-count="7">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid #F0F0F2">
+            <div>
+              <div style="font-size:12px;color:#6B6B73;margin-bottom:2px">{{ row.label }}</div>
+              <div style="font-size:14px;font-weight:700;color:#111111">{{ row.value }}</div>
+            </div>
+            <button onClick="{{ row.edit }}" style="background:none;border:none;color:#2F5FCF;font-size:13px;font-weight:700;cursor:pointer">Edit</button>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;background:#EAF0FB;color:#2F5FCF;border-radius:12px;padding:10px;margin:18px 0;font-size:13.5px;font-weight:700">Estimated cost: {{ estimatedCost }} credits</div>
+
+      <div style="flex:1;min-height:4px"></div>
+      <button onClick="{{ startGenerate }}" style="height:56px;background:linear-gradient(135deg,#4E7CDB,#20408F);color:#fff;border:none;border-radius:16px;font-size:16.5px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px;width:100%;cursor:pointer;box-shadow:0 14px 28px rgba(124,77,255,0.35)">Generate Video ✨</button>
+    </div>
+  </sc-if>
+
+  <!-- ============ GENERATING ============ -->
+  <sc-if value="{{ isGenerating }}">
+    <div data-screen-label="Generating" style="display:flex;flex-direction:column;flex:1;align-items:center;padding:40px 24px 20px;text-align:center">
+      <div style="font-size:19px;font-weight:800;color:#111111;margin-bottom:36px">Generating your video</div>
+      <div style="position:relative;width:180px;height:180px;border-radius:50%;background:{{ progressRingStyle }};display:flex;align-items:center;justify-content:center;margin-bottom:36px">
+        <div style="width:148px;height:148px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center">
+          <span style="font-size:32px;font-weight:800;color:#111111">{{ generatingProgress }}%</span>
+        </div>
+      </div>
+      <div style="font-size:14px;font-weight:700;color:#111111;margin-bottom:2px">Generating your video...</div>
+      <div style="font-size:12.5px;color:#6B6B73;margin-bottom:28px">This may take a few minutes.</div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;width:100%;text-align:left;margin-bottom:auto">
+        <sc-for list="{{ genStages }}" as="stage" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="{{ stage.iconStyle }}">
+              <sc-if value="{{ stage.done }}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></svg></sc-if>
+            </div>
+            <span style="{{ stage.textStyle }}">{{ stage.label }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <button onClick="{{ runInBackground }}" style="height:50px;background:#F7F7F8;color:#111111;border:1.5px solid #E8E8EC;border-radius:14px;font-size:14.5px;font-weight:700;width:100%;cursor:pointer;margin-top:24px">Run in Background</button>
+    </div>
+  </sc-if>
+
+  <!-- ============ RESULT ============ -->
+  <sc-if value="{{ isResult }}">
+    <div data-screen-label="Result" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="text-align:center;font-size:18px;font-weight:800;color:#111111;padding:12px 0 18px">Your Video is Ready 🎉</div>
+
+      <div style="position:relative;width:100%;aspect-ratio:{{ previewAspect }};border-radius:18px;overflow:hidden;margin-bottom:6px;background:#111">
+        <image-slot id="result-video" shape="rect" placeholder="Generated video"></image-slot>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none">
+          <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center"><svg width="20" height="20" viewBox="0 0 24 24" fill="#111"><path d="M8 5v14l11-7z"/></svg></div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <span style="font-size:11px;color:#6B6B73">00:00</span>
+        <div style="flex:1;height:4px;background:#E8E8EC;border-radius:2px;overflow:hidden"><div style="width:12%;height:100%;background:#2F5FCF"></div></div>
+        <span style="font-size:11px;color:#6B6B73">00:{{ duration }}</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:22px">
+        <div style="background:#F7F7F8;border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:#6B6B73">Duration</div><div style="font-size:13.5px;font-weight:700;color:#111">{{ duration }} sec</div></div>
+        <div style="background:#F7F7F8;border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:#6B6B73">Model</div><div style="font-size:13.5px;font-weight:700;color:#111">{{ selectedModel.name }}</div></div>
+        <div style="background:#F7F7F8;border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:#6B6B73">Resolution</div><div style="font-size:13.5px;font-weight:700;color:#111">{{ resolution }}</div></div>
+        <div style="background:#F7F7F8;border-radius:12px;padding:10px 12px"><div style="font-size:11px;color:#6B6B73">Aspect Ratio</div><div style="font-size:13.5px;font-weight:700;color:#111">{{ aspectRatio }}</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px">
+        <sc-for list="{{ resultActions }}" as="act" hint-placeholder-count="4">
+          <button onClick="{{ act.action }}" style="display:flex;flex-direction:column;align-items:center;gap:6px;background:#F7F7F8;border:none;border-radius:12px;padding:12px 4px;cursor:pointer">
+            <span style="color:#111" dangerouslySetInnerHTML="{{ act.icon }}"></span>
+            <span style="font-size:11px;font-weight:700;color:#111111">{{ act.label }}</span>
+          </button>
+        </sc-for>
+      </div>
+
+      <div style="flex:1;min-height:4px"></div>
+      <button onClick="{{ createAnother }}" style="height:52px;background:#2F5FCF;color:#fff;border:none;border-radius:14px;font-size:15.5px;font-weight:700;width:100%;cursor:pointer;margin-bottom:10px">Create Another Video</button>
+      <button onClick="{{ goProjects }}" style="height:48px;background:#fff;color:#111;border:1.5px solid #E8E8EC;border-radius:14px;font-size:14.5px;font-weight:700;width:100%;cursor:pointer">View Project</button>
+    </div>
+  </sc-if>
+
+  <!-- ============ PROJECTS ============ -->
+  <sc-if value="{{ isProjects }}">
+    <div data-screen-label="Projects" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="font-size:20px;font-weight:800;color:#111111;padding:8px 0 16px">My Projects</div>
+      <div style="display:flex;gap:6px;margin-bottom:16px;background:#F7F7F8;border-radius:12px;padding:4px">
+        <sc-for list="{{ projectTabs }}" as="tab" hint-placeholder-count="4">
+          <button onClick="{{ tab.select }}" style="{{ tab.style }}">{{ tab.label }}</button>
+        </sc-for>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px">
+        <sc-for list="{{ allProjects }}" as="item" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E8E8EC;border-radius:16px;padding:10px">
+            <image-slot id="{{ item.slotId }}" shape="rounded" radius="12" style="width:60px;height:60px;flex:none" placeholder="Thumb"></image-slot>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:700;color:#111111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.name }}</div>
+              <div style="font-size:12px;color:#6B6B73;margin-top:2px">{{ item.meta }}</div>
+            </div>
+            <span style="{{ item.badgeStyle }}">{{ item.status }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <button onClick="{{ startNewVideo }}" style="align-self:center;display:flex;align-items:center;gap:6px;background:#2F5FCF;color:#fff;border:none;border-radius:14px;padding:12px 20px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 10px 20px rgba(124,77,255,0.28);margin:8px 0 4px">+ New Video</button>
+    </div>
+  </sc-if>
+
+  <!-- ============ HISTORY ============ -->
+  <sc-if value="{{ isHistory }}">
+    <div data-screen-label="History" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="font-size:20px;font-weight:800;color:#111111;padding:8px 0 16px">History</div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <sc-for list="{{ historyItems }}" as="item" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #E8E8EC;border-radius:16px;padding:10px">
+            <image-slot id="{{ item.slotId }}" shape="rounded" radius="12" style="width:56px;height:56px;flex:none" placeholder="Thumb"></image-slot>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:700;color:#111111;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ item.name }}</div>
+              <div style="font-size:12px;color:#6B6B73;margin-top:2px">{{ item.meta }}</div>
+            </div>
+            <button onClick="{{ item.action }}" style="{{ item.actionStyle }}">{{ item.actionLabel }}</button>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ PROFILE ============ -->
+  <sc-if value="{{ isProfile }}">
+    <div data-screen-label="Profile" style="display:flex;flex-direction:column;flex:1;padding:8px 20px 16px">
+      <div style="font-size:20px;font-weight:800;color:#111111;padding:8px 0 20px">Profile</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:24px">
+        <div style="width:56px;height:56px;border-radius:50%;background:#DCE6F8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;color:#20408F">A</div>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#111111">Alex Rivera</div>
+          <div style="font-size:12.5px;color:#6B6B73">alex@studio.com</div>
+        </div>
+      </div>
+      <div style="background:#EAF0FB;border-radius:14px;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <span style="font-size:13.5px;font-weight:700;color:#2F5FCF">120 credits remaining</span>
+        <button style="background:#2F5FCF;color:#fff;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer">Top up</button>
+      </div>
+      <div style="display:flex;flex-direction:column">
+        <sc-for list="{{ profileRows }}" as="row" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid #F0F0F2">
+            <span style="font-size:14px;font-weight:600;color:#111111">{{ row }}</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6B6B73" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <sc-if value="{{ showBottomNav }}">
+    <div style="flex:none;display:flex;align-items:center;justify-content:space-around;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #E8E8EC;background:#fff">
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="5">
+        <button onClick="{{ item.select }}" style="background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;padding:4px 8px;min-width:44px">
+          <sc-if value="{{ item.isCenter }}">
+            <div style="width:44px;height:44px;border-radius:14px;background:#2F5FCF;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px rgba(124,77,255,0.35);margin-top:-18px"><span style="color:#fff;font-size:22px;font-weight:400;line-height:1">+</span></div>
+          </sc-if>
+          <sc-if value="{{ !item.isCenter }}">
+            <span style="{{ item.iconStyle }}" dangerouslySetInnerHTML="{{ item.icon }}"></span>
+            <span style="font-size:10.5px;font-weight:700;color:{{ item.color }}">{{ item.label }}</span>
+          </sc-if>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+</div>
+</div>
+</helmet>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    screen: 'home',
+    script: '',
+    scriptTouched: false,
+    sceneStyle: '',
+    styleTouched: false,
+    refLabels: {},
+    duration: 10,
+    aspectRatio: '9:16',
+    modelId: 'kling',
+    resolution: '1080p',
+    advancedOpen: false,
+    modelPickerOpen: false,
+    resPickerOpen: false,
+    camera: 'Auto',
+    motion: 'Medium',
+    promptAdherence: 60,
+    seed: '',
+    negativePrompt: '',
+    audio: false,
+    generatingProgress: 0,
+    projectTab: 'All',
+    showAllStyles: false,
+  };
+
+  MODELS = [
+    { id: 'seedance', name: 'Seedance', durations: [5, 10], aspectRatios: ['9:16', '16:9', '1:1'], resolutions: ['720p', '1080p'], refSupport: true, refTypes: ['character', 'scene', 'object'], audio: false, cost: 15 },
+    { id: 'kling', name: 'Kling 1.6 Pro', durations: [5, 10, 15], aspectRatios: ['9:16', '16:9', '1:1', '4:3', '3:4'], resolutions: ['720p', '1080p', '2K'], refSupport: true, refTypes: ['character', 'scene', 'object', 'start_frame', 'end_frame'], audio: false, cost: 20 },
+    { id: 'veo', name: 'Veo 3', durations: [8], aspectRatios: ['16:9', '9:16'], resolutions: ['1080p', '4K'], refSupport: false, refTypes: [], audio: true, cost: 32 },
+    { id: 'runway', name: 'Runway Gen-4', durations: [5, 10], aspectRatios: ['16:9', '1:1'], resolutions: ['720p', '1080p'], refSupport: true, refTypes: ['character', 'object', 'start_frame', 'end_frame'], audio: false, cost: 18 },
+    { id: 'hailuo', name: 'Hailuo 2.0', durations: [5, 10], aspectRatios: ['9:16', '16:9', '1:1'], resolutions: ['720p', '1080p'], refSupport: true, refTypes: ['character', 'scene', 'object'], audio: false, cost: 12 },
+  ];
+  REF_TYPE_META = {
+    character: 'Character', scene: 'Scene', object: 'Object', start_frame: 'Start Frame', end_frame: 'End Frame',
+  };
+
+  STYLES = [
+    { id: 'cinematic', name: 'Cinematic', c1: '#3b2f63', c2: '#4E7CDB', icon: '🎬' },
+    { id: '3d', name: '3D Animation', c1: '#FF8A65', c2: '#2F5FCF', icon: '🧊' },
+    { id: 'anime', name: 'Anime', c1: '#FF6FAE', c2: '#2F5FCF', icon: '🌸' },
+    { id: 'photoreal', name: 'Photorealistic', c1: '#2F5D8A', c2: '#2F5FCF', icon: '📸' },
+    { id: 'cartoon', name: 'Cartoon', c1: '#FFB74D', c2: '#2F5FCF', icon: '🧸' },
+    { id: 'watercolor', name: 'Watercolor', c1: '#4DD0C4', c2: '#2F5FCF', icon: '🎨' },
+    { id: 'fantasy', name: 'Fantasy', c1: '#8E5CF7', c2: '#3b2f63', icon: '🪄' },
+    { id: 'custom', name: 'Custom', c1: '#C7C7CC', c2: '#8E8E93', icon: '➕' },
+  ];
+  STYLES_VISIBLE_COUNT = 6;
+
+  ALL_DURATIONS = [5, 8, 10, 15];
+  ALL_ASPECTS = [
+    { id: '9:16', label: 'Portrait', w: 20, h: 34 },
+    { id: '16:9', label: 'Landscape', w: 34, h: 20 },
+    { id: '1:1', label: 'Square', w: 26, h: 26 },
+    { id: '4:3', label: 'Standard', w: 30, h: 23 },
+    { id: '3:4', label: 'Portrait', w: 23, h: 30 },
+    { id: 'auto', label: 'Auto', w: 26, h: 26 },
+  ];
+  ALL_RESOLUTIONS = ['720p', '1080p', '2K', '4K'];
+  CAMERA_OPTIONS = ['Auto', 'Static', 'Pan', 'Zoom', 'Orbit', 'Tracking', 'Dynamic'];
+  MOTION_OPTIONS = ['Low', 'Medium', 'High'];
+
+
+  currentModel() { return this.MODELS.find(m => m.id === this.state.modelId) || this.MODELS[0]; }
+
+  clampToModel(m) {
+    const upd = {};
+    if (!m.durations.includes(this.state.duration)) upd.duration = m.durations[0];
+    if (this.state.aspectRatio !== 'auto' && !m.aspectRatios.includes(this.state.aspectRatio)) upd.aspectRatio = m.aspectRatios[0];
+    if (!m.resolutions.includes(this.state.resolution)) upd.resolution = m.resolutions[0];
+    if (!m.audio) upd.audio = false;
+    return upd;
+  }
+
+  selectModel(id) {
+    const m = this.MODELS.find(x => x.id === id);
+    this.setState({ modelId: id, modelPickerOpen: false, ...this.clampToModel(m) });
+  }
+
+  startNewVideo() {
+    this.setState({ screen: 'script', script: '', scriptTouched: false, sceneStyle: '', styleTouched: false, refLabels: {} });
+  }
+  goHome() { this.setState({ screen: 'home' }); }
+  goProjects() { this.setState({ screen: 'projects' }); }
+  goHistory() { this.setState({ screen: 'history' }); }
+  goProfile() { this.setState({ screen: 'profile' }); }
+  toScript() { this.setState({ screen: 'script' }); }
+  toScene() {
+    if (!this.state.script.trim()) { this.setState({ scriptTouched: true }); return; }
+    this.setState({ screen: 'scene' });
+  }
+  toReferences() {
+    if (!this.state.sceneStyle) { this.setState({ styleTouched: true }); return; }
+    this.setState({ screen: 'references' });
+  }
+  toSettings() { this.setState({ screen: 'settings' }); }
+  toReview() { this.setState({ screen: 'review' }); }
+
+  onScriptChange(e) { this.setState({ script: e.target.value.slice(0, 2000) }); }
+  improvePrompt() {
+    const s = this.state.script.trim();
+    if (!s) return;
+    this.setState({ script: s.replace(/\.?$/, '') + ', shot in dramatic cinematic lighting with smooth camera motion.' });
+  }
+  selectStyle(id) { this.setState({ sceneStyle: id, styleTouched: false }); }
+  toggleShowAllStyles() { this.setState({ showAllStyles: !this.state.showAllStyles }); }
+  cycleRefLabel(idx) {
+    const allowed = this.currentModel().refTypes;
+    if (!allowed.length) return;
+    const labels = { ...this.state.refLabels };
+    const cur = labels[idx] || allowed[0];
+    const i = allowed.indexOf(cur);
+    labels[idx] = allowed[(i === -1 ? 0 : i + 1) % allowed.length];
+    this.setState({ refLabels: labels });
+  }
+  toggleModelPicker() { this.setState({ modelPickerOpen: !this.state.modelPickerOpen, resPickerOpen: false }); }
+  toggleResPicker() { this.setState({ resPickerOpen: !this.state.resPickerOpen, modelPickerOpen: false }); }
+  selectResolution(r) { this.setState({ resolution: r, resPickerOpen: false }); }
+  selectDuration(d) { this.setState({ duration: d }); }
+  selectAspect(id) { this.setState({ aspectRatio: id }); }
+  selectCamera(c) { this.setState({ camera: c }); }
+  selectMotion(m) { this.setState({ motion: m }); }
+  toggleAdvanced() { this.setState({ advancedOpen: !this.state.advancedOpen }); }
+  toggleAudio() { this.setState({ audio: !this.state.audio }); }
+  onAdherenceChange(e) { this.setState({ promptAdherence: Number(e.target.value) }); }
+  onSeedChange(e) { this.setState({ seed: e.target.value }); }
+  onNegativeChange(e) { this.setState({ negativePrompt: e.target.value }); }
+
+  startGenerate() {
+    this.setState({ screen: 'generating', generatingProgress: 0 });
+    clearInterval(this._timer);
+    this._timer = setInterval(() => {
+      const p = Math.min(100, this.state.generatingProgress + 7);
+      if (p >= 100) { clearInterval(this._timer); this.setState({ generatingProgress: 100, screen: 'result' }); }
+      else this.setState({ generatingProgress: p });
+    }, 300);
+  }
+  runInBackground() { clearInterval(this._timer); this.setState({ screen: 'home' }); }
+  createAnother() { this.startNewVideo(); }
+  selectProjectTab(t) { this.setState({ projectTab: t }); }
+  noop() {}
+
+  componentWillUnmount() { clearInterval(this._timer); }
+
+  renderVals() {
+    const s = this.state;
+    const model = this.currentModel();
+    const durations = this.ALL_DURATIONS.filter(d => model.durations.includes(d));
+    const aspects = this.ALL_ASPECTS.filter(a => a.id === 'auto' || model.aspectRatios.includes(a.id));
+    const resolutions = this.ALL_RESOLUTIONS.filter(r => model.resolutions.includes(r));
+
+    const primaryBtn = (enabled) => `height:56px;background:${enabled ? '#2F5FCF' : '#E8E8EC'};color:${enabled ? '#fff' : '#A8A8AE'};border:none;border-radius:14px;font-size:16px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px;width:100%;cursor:${enabled ? 'pointer' : 'not-allowed'};box-shadow:${enabled ? '0 10px 22px rgba(124,77,255,0.28)' : 'none'};margin-top:8px`;
+
+    const chip = (active) => `padding:10px 16px;border-radius:12px;border:1.5px solid ${active ? '#2F5FCF' : '#E8E8EC'};background:${active ? '#EAF0FB' : '#fff'};color:${active ? '#2F5FCF' : '#111111'};font-size:13.5px;font-weight:700;cursor:pointer`;
+
+    const visibleStyles = s.showAllStyles ? this.STYLES : this.STYLES.slice(0, this.STYLES_VISIBLE_COUNT);
+    const styleOptions = visibleStyles.map(st => ({
+      id: st.id, name: st.name, icon: st.icon,
+      selected: s.sceneStyle === st.id,
+      select: () => this.selectStyle(st.id),
+      cardStyle: `display:flex;flex-direction:column;gap:8px;background:#fff;border:2px solid ${s.sceneStyle === st.id ? '#2F5FCF' : '#E8E8EC'};border-radius:16px;padding:8px;cursor:pointer;text-align:left`,
+      thumbStyle: `position:relative;width:100%;aspect-ratio:4/3;border-radius:12px;background:linear-gradient(135deg,${st.c1},${st.c2})`,
+    }));
+    const hasMoreStyles = this.STYLES.length > this.STYLES_VISIBLE_COUNT;
+    const seeAllLabel = s.showAllStyles ? '− Show fewer styles' : '+ See all styles';
+
+    const durationOptions = durations.map(d => ({ label: d + ' sec', select: () => this.selectDuration(d), chipStyle: chip(s.duration === d) }));
+
+    const aspectOptions = aspects.map(a => ({
+      id: a.id === 'auto' ? 'Auto' : a.id, label: a.label,
+      select: () => this.selectAspect(a.id),
+      cardStyle: `display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px;border-radius:14px;border:1.5px solid ${s.aspectRatio === a.id ? '#2F5FCF' : '#E8E8EC'};background:${s.aspectRatio === a.id ? '#EAF0FB' : '#fff'};cursor:pointer`,
+      boxStyle: `width:${a.w}px;height:${a.h}px;border:2px solid ${s.aspectRatio === a.id ? '#2F5FCF' : '#6B6B73'};border-radius:4px`,
+    }));
+
+    const modelOptions = this.MODELS.map(m => ({
+      name: m.name, costLabel: m.cost + ' cr',
+      select: () => this.selectModel(m.id),
+      rowStyle: `width:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:space-between;padding:13px 14px;background:${m.id === s.modelId ? '#EAF0FB' : '#fff'};color:${m.id === s.modelId ? '#2F5FCF' : '#111111'};border:none;border-bottom:1px solid #F0F0F2;font-size:14px;font-weight:700;cursor:pointer`,
+    }));
+
+    const resolutionOptions = resolutions.map(r => ({
+      label: r, select: () => this.selectResolution(r),
+      rowStyle: `width:100%;box-sizing:border-box;display:flex;padding:13px 14px;background:${r === s.resolution ? '#EAF0FB' : '#fff'};color:${r === s.resolution ? '#2F5FCF' : '#111111'};border:none;border-bottom:1px solid #F0F0F2;font-size:14px;font-weight:700;cursor:pointer`,
+    }));
+
+    const cameraOptions = this.CAMERA_OPTIONS.map(c => ({ label: c, select: () => this.selectCamera(c), chipStyle: chip(s.camera === c) }));
+    const motionOptions = this.MOTION_OPTIONS.map(m => ({ label: m, select: () => this.selectMotion(m), chipStyle: chip(s.motion === m) }));
+
+    const allowedRefTypes = model.refTypes;
+    const refSlots = [0, 1, 2, 3, 4].map(i => {
+      const key = s.refLabels[i] || (allowedRefTypes[i % allowedRefTypes.length] || null);
+      return {
+        slotId: 'ref-slot-' + i,
+        label: key ? this.REF_TYPE_META[key] : 'Unsupported',
+        cycleLabel: () => this.cycleRefLabel(i),
+        disabled: !model.refSupport,
+        wrapStyle: `display:flex;flex-direction:column;gap:6px;opacity:${model.refSupport ? 1 : 0.4};pointer-events:${model.refSupport ? 'auto' : 'none'}`,
+      };
+    });
+    const refTypeChips = ['character', 'scene', 'object', 'start_frame', 'end_frame'].map(key => ({
+      label: this.REF_TYPE_META[key],
+      supported: allowedRefTypes.includes(key),
+      chipStyle: `font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;background:${allowedRefTypes.includes(key) ? '#EAF0FB' : '#F0F0F2'};color:${allowedRefTypes.includes(key) ? '#2F5FCF' : '#B4B4BA'};text-decoration:${allowedRefTypes.includes(key) ? 'none' : 'line-through'}`,
+    }));
+
+    const selectedStyle = this.STYLES.find(st => st.id === s.sceneStyle);
+    const refCount = Object.keys(s.refLabels).length || 0;
+
+    const reviewRows = [
+      { label: 'Script', value: s.script ? (s.script.length > 60 ? s.script.slice(0, 60) + '…' : s.script) : '—', edit: () => this.toScript() },
+      { label: 'Scene Style', value: selectedStyle ? selectedStyle.name : '—', edit: () => this.setState({ screen: 'scene' }) },
+      { label: 'Reference Images', value: refCount + ' images', edit: () => this.setState({ screen: 'references' }) },
+      { label: 'Duration', value: s.duration + ' seconds', edit: () => this.toSettings() },
+      { label: 'Aspect Ratio', value: s.aspectRatio, edit: () => this.toSettings() },
+      { label: 'AI Model', value: model.name, edit: () => this.toSettings() },
+      { label: 'Resolution', value: s.resolution, edit: () => this.toSettings() },
+    ];
+
+    const stageDefs = ['Preparing prompt', 'Processing reference images', 'Generating video', 'Processing output', 'Finalizing'];
+    const thresholds = [10, 25, 90, 97, 100];
+    const genStages = stageDefs.map((label, i) => {
+      const done = s.generatingProgress >= thresholds[i];
+      const active = !done && (i === 0 || s.generatingProgress >= thresholds[i - 1]);
+      return {
+        label, done,
+        iconStyle: `width:20px;height:20px;border-radius:50%;flex:none;display:flex;align-items:center;justify-content:center;background:${done ? '#2F5FCF' : active ? '#EAF0FB' : '#F0F0F2'};border:${active && !done ? '2px solid #2F5FCF' : 'none'}`,
+        textStyle: `font-size:13.5px;font-weight:${done || active ? 700 : 500};color:${done ? '#111111' : active ? '#2F5FCF' : '#6B6B73'}`,
+      };
+    });
+
+    const resultActions = [
+      { label: 'Download', icon: { __html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 19h16"/></svg>' }, action: () => this.noop() },
+      { label: 'Share', icon: { __html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg>' }, action: () => this.noop() },
+      { label: 'Regenerate', icon: { __html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4v5h5M20 20v-5h-5"/><path d="M4 9a8 8 0 0114-4.5M20 15a8 8 0 01-14 4.5"/></svg>' }, action: () => this.startGenerate() },
+      { label: 'Edit Prompt', icon: { __html: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>' }, action: () => this.toScript() },
+    ];
+
+    const demoThumb = (id) => ({ slotId: id });
+    const recentProjects = [
+      { ...demoThumb('home-p1'), name: 'Future City', meta: '8s · 9:16 · Kling 1.6' },
+      { ...demoThumb('home-p2'), name: 'Mountain Adventure', meta: '12s · 16:9 · Seedance' },
+    ];
+
+    const statusBadge = (status) => {
+      const colors = { Completed: ['#E9F7EF', '#1E8E4A'], Generating: ['#FFF6E9', '#8A6415'], Failed: ['#FDECEC', '#C6362C'] };
+      const [bg, fg] = colors[status] || colors.Completed;
+      return `font-size:11px;font-weight:700;padding:5px 10px;border-radius:999px;background:${bg};color:${fg};flex:none`;
+    };
+    const allProjectsRaw = [
+      { slotId: 'proj-1', name: 'Future City', meta: '8s · 9:16 · Kling 1.6', status: 'Completed' },
+      { slotId: 'proj-2', name: 'Mountain Adventure', meta: '12s · 16:9 · Seedance', status: 'Completed' },
+      { slotId: 'proj-3', name: 'Cyberpunk Streets', meta: '10s · 9:16 · Veo 3', status: 'Generating' },
+      { slotId: 'proj-4', name: 'Ocean World', meta: '15s · 16:9 · Runway', status: 'Completed' },
+      { slotId: 'proj-5', name: 'Fantasy Castle', meta: '7s · 9:16 · Hailuo', status: 'Failed' },
+    ];
+    const allProjects = allProjectsRaw
+      .filter(p => s.projectTab === 'All' || p.status === s.projectTab)
+      .map(p => ({ ...p, badgeStyle: statusBadge(p.status) }));
+    const projectTabs = ['All', 'Generating', 'Completed', 'Failed'].map(t => ({
+      label: t, select: () => this.selectProjectTab(t),
+      style: `flex:1;padding:8px 0;border:none;border-radius:9px;background:${s.projectTab === t ? '#fff' : 'transparent'};color:${s.projectTab === t ? '#111111' : '#6B6B73'};font-size:12.5px;font-weight:700;cursor:pointer;box-shadow:${s.projectTab === t ? '0 1px 4px rgba(0,0,0,0.08)' : 'none'}`,
+    }));
+
+    const historyRaw = [
+      { slotId: 'hist-1', name: 'Future City', meta: 'Kling 1.6 · Just now', status: 'Completed' },
+      { slotId: 'hist-2', name: 'Mountain Adventure', meta: 'Seedance · 2 days ago', status: 'Completed' },
+      { slotId: 'hist-3', name: 'Cyberpunk Streets', meta: 'Veo 3 · 1 week ago', status: 'Failed' },
+      { slotId: 'hist-4', name: 'Ocean World', meta: 'Runway · 2 weeks ago', status: 'Completed' },
+      { slotId: 'hist-5', name: 'Fantasy Castle', meta: 'Hailuo · 3 weeks ago', status: 'Queued' },
+    ];
+    const historyItems = historyRaw.map(h => ({
+      ...h,
+      actionLabel: h.status === 'Failed' ? 'Retry' : h.status === 'Queued' ? 'Cancel' : 'View',
+      action: () => this.noop(),
+      actionStyle: `flex:none;font-size:12px;font-weight:700;padding:7px 12px;border-radius:10px;border:none;cursor:pointer;background:${h.status === 'Failed' ? '#FDECEC' : '#EAF0FB'};color:${h.status === 'Failed' ? '#C6362C' : '#2F5FCF'}`,
+    }));
+
+    const navDefs = [
+      { key: 'home', label: 'Home', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>' },
+      { key: 'projects', label: 'Projects', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>' },
+      { key: 'new', label: '', icon: '', isCenter: true },
+      { key: 'history', label: 'History', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>' },
+      { key: 'profile', label: 'Profile', icon: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>' },
+    ];
+    const navHandlers = { home: () => this.goHome(), projects: () => this.goProjects(), new: () => this.startNewVideo(), history: () => this.goHistory(), profile: () => this.goProfile() };
+    const navItems = navDefs.map(n => ({
+      isCenter: !!n.isCenter, label: n.label,
+      icon: { __html: n.icon },
+      select: navHandlers[n.key],
+      iconStyle: `color:${s.screen === n.key ? '#2F5FCF' : '#6B6B73'}`,
+      color: s.screen === n.key ? '#2F5FCF' : '#6B6B73',
+    }));
+
+    const wizardScreens = ['script', 'scene', 'references', 'settings', 'review', 'generating', 'result'];
+    const showBottomNav = !wizardScreens.includes(s.screen);
+
+    return {
+      isHome: s.screen === 'home', isScript: s.screen === 'script', isScene: s.screen === 'scene',
+      isReferences: s.screen === 'references', isSettings: s.screen === 'settings', isReview: s.screen === 'review',
+      isGenerating: s.screen === 'generating', isResult: s.screen === 'result', isProjects: s.screen === 'projects',
+      isHistory: s.screen === 'history', isProfile: s.screen === 'profile',
+      showBottomNav,
+      startNewVideo: () => this.startNewVideo(), goHome: () => this.goHome(), goProjects: () => this.goProjects(),
+      toScript: () => this.toScript(), toScene: () => this.toScene(), toReferences: () => this.toReferences(),
+      toSettings: () => this.toSettings(), toReview: () => this.toReview(),
+      script: s.script, scriptCount: s.script.length, onScriptChange: (e) => this.onScriptChange(e),
+      showScriptError: s.scriptTouched && !s.script.trim(),
+      improvePrompt: () => this.improvePrompt(),
+      scriptTips: ['Be descriptive and specific', 'Add actions and details', 'Keep it simple and clear'],
+      nextBtnStyle: primaryBtn(true),
+      styleOptions, showStyleError: s.styleTouched && !s.sceneStyle,
+      hasMoreStyles, seeAllLabel, toggleShowAllStyles: () => this.toggleShowAllStyles(),
+      refSlots, refTypeChips, modelSupportsRefs: model.refSupport, selectedModel: model,
+      modelPickerOpen: s.modelPickerOpen, resPickerOpen: s.resPickerOpen,
+      toggleModelPicker: () => this.toggleModelPicker(), toggleResPicker: () => this.toggleResPicker(),
+      modelOptions, resolutionOptions, resolution: s.resolution,
+      estimatedCost: model.cost, durationOptions, aspectOptions,
+      advancedOpen: s.advancedOpen, toggleAdvanced: () => this.toggleAdvanced(),
+      advancedChevronStyle: `transform:rotate(${s.advancedOpen ? 180 : 0}deg);transition:transform .15s`,
+      cameraOptions, motionOptions,
+      promptAdherence: s.promptAdherence, onAdherenceChange: (e) => this.onAdherenceChange(e),
+      seed: s.seed, onSeedChange: (e) => this.onSeedChange(e),
+      negativePrompt: s.negativePrompt, onNegativeChange: (e) => this.onNegativeChange(e),
+      modelSupportsAudio: model.audio, toggleAudio: () => this.toggleAudio(),
+      audioToggleStyle: `width:46px;height:26px;border-radius:999px;border:none;cursor:pointer;background:${s.audio ? '#2F5FCF' : '#E8E8EC'};position:relative;padding:3px;display:flex;justify-content:${s.audio ? 'flex-end' : 'flex-start'}`,
+      audioKnobStyle: `width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.2)`,
+      previewAspect: s.aspectRatio === 'auto' ? '9/16' : s.aspectRatio.replace(':', '/'),
+      reviewRows, startGenerate: () => this.startGenerate(),
+      generatingProgress: s.generatingProgress,
+      progressRingStyle: `conic-gradient(#2F5FCF ${s.generatingProgress * 3.6}deg, #E8E8EC 0deg)`,
+      genStages, runInBackground: () => this.runInBackground(),
+      duration: s.duration, aspectRatio: s.aspectRatio,
+      resultActions, createAnother: () => this.createAnother(),
+      allProjects, projectTabs, historyItems, recentProjects, navItems,
+      profileRows: ['Account Details', 'Credits & Billing', 'Notifications', 'Help & Support'],
+    };
+  }
+}
+</script>
+</body>
+</html>
