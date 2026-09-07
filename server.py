@@ -31,6 +31,7 @@ from urllib.parse import parse_qs
 
 import veo
 import openrouter_video
+import ark_video
 
 try:                                     # Pillow: crop one clean character reference from the board
     from PIL import Image as _PILImage
@@ -146,15 +147,20 @@ ENGINES = {
     "seedance": {"provider": "openrouter", "resolutions": {"720p", "1080p"}},
     "seedance-fast": {"provider": "openrouter", "resolutions": {"720p", "1080p"}},
     "seedance-mini": {"provider": "openrouter", "resolutions": {"480p", "720p"}},
+    "seedance-2.5": {"provider": "openrouter", "resolutions": {"480p", "720p"}},
+    "ark-seedance-mini": {"provider": "ark", "resolutions": {"480p", "720p"}},
 }
 DURATIONS = (4, 6, 8)                 # Veo's hard limit — Veo API rejects anything else
 ASPECTS = ("16:9", "9:16")            # landscape / portrait (Shorts, Reels)
 
 
 def valid_duration(tier: str, duration: int) -> bool:
-    """Veo tiers are locked to 4/6/8s; OpenRouter engines use their own model range."""
-    if ENGINES.get(tier, {}).get("provider") == "openrouter":
+    """Veo tiers are locked to 4/6/8s; OpenRouter/Ark engines use their own model range."""
+    provider = ENGINES.get(tier, {}).get("provider")
+    if provider == "openrouter":
         return duration in openrouter_video.MODELS.get(tier, {}).get("durations", DURATIONS)
+    if provider == "ark":
+        return duration in ark_video.MODELS.get(tier, {}).get("durations", DURATIONS)
     return duration in DURATIONS
 
 
@@ -174,15 +180,21 @@ def validate_engine(tier: str, resolution: str, aspect: str = "16:9") -> str | N
 
 def check_engine_key(tier: str) -> None:
     """Raises RuntimeError when the engine's API key is missing."""
-    if ENGINES[tier]["provider"] == "openrouter":
+    provider = ENGINES[tier]["provider"]
+    if provider == "openrouter":
         openrouter_video.load_api_key()
+    elif provider == "ark":
+        ark_video.load_api_key()
     else:
         veo.load_api_key()
 
 
 def engine_estimate(tier: str, resolution: str, duration: int) -> float:
-    if ENGINES[tier]["provider"] == "openrouter":
+    provider = ENGINES[tier]["provider"]
+    if provider == "openrouter":
         return openrouter_video.estimate_cost(tier, resolution, duration)
+    if provider == "ark":
+        return ark_video.estimate_cost(tier, resolution, duration)
     return veo.estimate_cost(tier, resolution, duration)
 
 
@@ -190,8 +202,14 @@ def engine_generate(tier: str, prompt: str, out_dir: Path, *, image_path: Path |
                     resolution: str, duration: int, aspect_ratio: str = "16:9",
                     reference_paths: list[Path] | None = None, progress) -> dict:
     """Dispatch one clip generation to the engine's provider module."""
-    if ENGINES[tier]["provider"] == "openrouter":
+    provider = ENGINES[tier]["provider"]
+    if provider == "openrouter":
         return openrouter_video.generate_clip(
+            prompt, out_dir, engine=tier, image_path=image_path,
+            resolution=resolution, duration=duration, aspect_ratio=aspect_ratio,
+            reference_paths=reference_paths, progress=progress)
+    if provider == "ark":
+        return ark_video.generate_clip(
             prompt, out_dir, engine=tier, image_path=image_path,
             resolution=resolution, duration=duration, aspect_ratio=aspect_ratio,
             reference_paths=reference_paths, progress=progress)
@@ -1257,6 +1275,11 @@ if __name__ == "__main__":
         print("OpenRouter API key (Grok/Seedance): found")
     except RuntimeError as exc:
         print(f"OpenRouter API key (Grok/Seedance): MISSING — {exc}")
+    try:
+        ark_video.load_api_key()
+        print("BytePlus Ark API key (direct Seedance): found")
+    except RuntimeError as exc:
+        print(f"BytePlus Ark API key (direct Seedance): MISSING — {exc}")
     if load_password():
         print("Access password: set — sign-in required")
     else:

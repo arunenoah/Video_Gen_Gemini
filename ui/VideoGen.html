@@ -28,10 +28,10 @@
 <body>
 <div id="root"></div>
 
-<script type="text/babel" src="/ui/vg-icons.jsx?v=13"></script>
-<script type="text/babel" src="/ui/vg-core.jsx?v=13"></script>
-<script type="text/babel" src="/ui/vg-views-input.jsx?v=13"></script>
-<script type="text/babel" src="/ui/vg-views-output.jsx?v=13"></script>
+<script type="text/babel" src="/ui/vg-icons.jsx?v=14"></script>
+<script type="text/babel" src="/ui/vg-core.jsx?v=14"></script>
+<script type="text/babel" src="/ui/vg-views-input.jsx?v=14"></script>
+<script type="text/babel" src="/ui/vg-views-output.jsx?v=14"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
@@ -43,6 +43,8 @@ const TABS = [
   { id: 'review',  step: 4, icon: 'check-circle', label: 'Review' },
   { id: 'library', step: 0, icon: 'film', label: 'Library' },
 ];
+
+const QUEUE_CONCURRENCY = 3;   // max generations running at once — the rest wait as 'queued'
 
 // ---------- preferences (localStorage replaces the prototype tweaks host) ----------
 const PREF_DEFAULTS = { theme: 'ocean', navLayout: 'Top tabs', sceneEditor: 'Grid' };
@@ -237,8 +239,8 @@ function App() {
   const [serverOk, setServerOk] = useState(null);
   const [enhancing, setEnhancing] = useState(false);
   const [writing, setWriting] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [progress, setProgress] = useState({ pct: 0, scene: 1, label: '' });
+  const [queue, setQueue] = useState([]);           // generation queue — shown in the right rail
+  const startedRef = useRef(new Set());              // guards against double-starting a queue item
   const [generations, setGenerations] = useState([]);
   const [clipsByStory, setClipsByStory] = useState({});
   const [selected, setSelected] = useState([]);
@@ -293,6 +295,65 @@ function App() {
     } catch { setServerOk(false); }
   }
   useEffect(() => { loadLibrary(); }, []);
+
+  // ---------- generation queue (the right rail) ----------
+  function updateQueueItem(id, patch) { setQueue(q => q.map(x => x.id === id ? { ...x, ...patch } : x)); }
+  const dismissQueueItem = (id) => setQueue(q => q.filter(x => x.id !== id));
+
+  async function runQueueItem(item) {
+    let job;
+    try {
+      const res = await fetch(item.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item.body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      updateQueueItem(item.id, { jobId: data.jobId, label: 'Rendering…', pct: 3, scenesTotal: data.sceneCount || item.scenesTotal });
+      const total = data.sceneCount || item.scenesTotal;
+      for (;;) {
+        await new Promise(r => setTimeout(r, 4000));
+        let jres, jdata;
+        try {
+          jres = await fetch('/api/job/' + data.jobId);
+          jdata = await jres.json();
+          if (!jres.ok) throw new Error(jdata.error || jres.statusText);
+        } catch { continue; }
+        job = jdata;
+        if (job.status === 'done') break;
+        if (job.status === 'failed') throw new Error(job.detail || 'generation failed');
+        const detail = job.detail || job.status;
+        const m = detail.match(/clip (\d+)\/(\d+)/);
+        const cur = m ? Number(m[1]) : 1, tot = m ? Number(m[2]) : total;
+        const pct = /stitch/i.test(detail) ? 97 : Math.min(94, Math.max(3, ((cur - 0.5) / tot) * 94));
+        updateQueueItem(item.id, { pct, label: /stitch/i.test(detail) ? 'Stitching…' : `Rendering scene ${cur} of ${tot}…` });
+      }
+      updateQueueItem(item.id, { status: 'done', pct: 100, label: 'Done', cost: job.cost || 0, genId: job.genId });
+      setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
+      await loadLibrary();
+      showToast(item.title + ' is ready 🎬');
+    } catch (err) {
+      updateQueueItem(item.id, { status: 'failed', label: 'Failed', error: err.message });
+      showToast(item.title + ' failed: ' + err.message);
+    }
+  }
+
+  function enqueue(entry) {
+    const item = { id: crypto.randomUUID(), status: 'queued', pct: 0, label: 'Queued…', jobId: null, cost: 0, genId: null, error: null, ...entry };
+    setQueue(q => [item, ...q]);
+    return item;
+  }
+
+  // promote up to QUEUE_CONCURRENCY 'queued' items to 'running' as slots free up
+  useEffect(() => {
+    const runningCount = queue.filter(q => q.status === 'running').length;
+    const slots = QUEUE_CONCURRENCY - runningCount;
+    if (slots <= 0) return;
+    const toStart = queue.filter(q => q.status === 'queued' && !startedRef.current.has(q.id)).slice(0, slots);
+    if (!toStart.length) return;
+    toStart.forEach(item => {
+      startedRef.current.add(item.id);
+      updateQueueItem(item.id, { status: 'running', label: 'Starting…' });
+      runQueueItem(item);
+    });
+  }, [queue]);
 
   // ---------- scene editing ----------
   const updateScene = (id, patch) => setScenes(s => s.map(x => x.id === id ? { ...x, ...patch } : x));
@@ -398,96 +459,59 @@ function App() {
       } catch { continue; }
       if (job.status === 'done') return job;
       if (job.status === 'failed') throw new Error(job.detail || 'generation failed');
-      const detail = job.detail || job.status;
-      const m = detail.match(/clip (\d+)\/(\d+)/);
-      const cur = m ? Number(m[1]) : 1, tot = m ? Number(m[2]) : total;
-      const pct = /stitch/i.test(detail) ? 97 : Math.min(94, Math.max(3, ((cur - 0.5) / tot) * 94));
-      setProgress({ pct, scene: cur, label: /stitch/i.test(detail) ? 'Stitching the final movie…' : `Rendering scene ${cur} of ${tot}…` });
     }
   }
 
-  async function doGenerate() {
-    if (generating || !scenes.length) return;
-    setGenerating(true);
-    setProgress({ pct: 2, scene: 1, label: 'Sending your story to the studio…' });
-    try {
-      let res, body;
-      if (mode === 'story') {
-        const { images, indexFor } = collectImages(scenes);
-        body = {
-          title: scenes[0].title,
-          tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
-          resolution: resId,
-          aspect: aspectId,
-          scenes: scenes.map((s, i) => ({
-            prompt: finalPrompt(s, styleId, voiceId, musicId, indexFor[i] !== null),
-            duration: s.duration,
-            imageIndex: indexFor[i],
-          })),
-          images,
-          referenceImages: imagePayload(refImages),
-        };
-        res = await fetch('/api/story', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      } else {
-        const s = scenes[0];
-        body = {
-          prompt: finalPrompt(s, styleId, voiceId, musicId, !!s.image),
-          tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
-          resolution: resId,
-          aspect: aspectId,
-          duration: s.duration,
-          referenceImages: imagePayload(refImages),
-        };
-        if (s.image) { body.imageBase64 = s.image; body.imageMime = (s.image.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg'; }
-        res = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      }
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      const job = await pollJob(data.jobId, scenes.length);
-      setProgress({ pct: 100, scene: scenes.length, label: 'Done!' });
-      setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
-      await loadLibrary();
-      setGenerating(false);
-      setTab('library');
-      showToast('Your movie is ready 🎬');
-    } catch (err) {
-      setGenerating(false);
-      showToast('Generation failed: ' + err.message);
-      alert('Generation failed:\n\n' + err.message);
-    }
-  }
-
-  // ---------- storyboard image → movie (Haiku vision reads it, then auto-generates) ----------
-  async function doStoryboard(imgDataUrl, sceneCap) {
-    if (generating || !imgDataUrl) return;
-    setGenerating(true);
-    setProgress({ pct: 2, scene: 1, label: 'Reading your storyboard…' });
-    try {
-      const body = {
-        imageBase64: imgDataUrl,
-        imageMime: (imgDataUrl.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg',
+  function doGenerate() {
+    if (!scenes.length) return;
+    let endpoint, body;
+    if (mode === 'story') {
+      const { images, indexFor } = collectImages(scenes);
+      body = {
+        title: scenes[0].title,
         tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
         resolution: resId,
         aspect: aspectId,
-        duration: 8,
+        scenes: scenes.map((s, i) => ({
+          prompt: finalPrompt(s, styleId, voiceId, musicId, indexFor[i] !== null),
+          duration: s.duration,
+          imageIndex: indexFor[i],
+        })),
+        images,
+        referenceImages: imagePayload(refImages),
       };
-      if (sceneCap) body.scenes = sceneCap;   // optional cost cap; omitted ⇒ all panels (≤20)
-      const res = await fetch('/api/storyboard', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || res.statusText);
-      showToast(`Haiku read ${data.sceneCount} scene${data.sceneCount === 1 ? '' : 's'} — generating your movie…`);
-      const job = await pollJob(data.jobId, data.sceneCount || 1);
-      setProgress({ pct: 100, scene: data.sceneCount || 1, label: 'Done!' });
-      setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
-      await loadLibrary();
-      setGenerating(false);
-      setTab('library');
-      showToast('Your movie is ready 🎬');
-    } catch (err) {
-      setGenerating(false);
-      showToast('Storyboard failed: ' + err.message);
-      alert('Storyboard failed:\n\n' + err.message);
+      endpoint = '/api/story';
+    } else {
+      const s = scenes[0];
+      body = {
+        prompt: finalPrompt(s, styleId, voiceId, musicId, !!s.image),
+        tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
+        resolution: resId,
+        aspect: aspectId,
+        duration: s.duration,
+        referenceImages: imagePayload(refImages),
+      };
+      if (s.image) { body.imageBase64 = s.image; body.imageMime = (s.image.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg'; }
+      endpoint = '/api/generate';
     }
+    enqueue({ endpoint, body, title: scenes[0].title || 'Movie', scenesTotal: scenes.length, accent: scenes[0].accent });
+    showToast('Added to the queue — watch it in the rail on the right');
+  }
+
+  // ---------- storyboard image → movie (Haiku vision reads it, then auto-generates) ----------
+  function doStoryboard(imgDataUrl, sceneCap) {
+    if (!imgDataUrl) return;
+    const body = {
+      imageBase64: imgDataUrl,
+      imageMime: (imgDataUrl.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg',
+      tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
+      resolution: resId,
+      aspect: aspectId,
+      duration: 8,
+    };
+    if (sceneCap) body.scenes = sceneCap;   // optional cost cap; omitted ⇒ all panels (≤20)
+    enqueue({ endpoint: '/api/storyboard', body, title: 'Storyboard movie', scenesTotal: sceneCap || 1, accent: SCENE_ACCENTS[0] });
+    showToast('Added to the queue — Haiku is reading your storyboard');
   }
 
   // ---------- resume a partial story (rate-limited mid-run) ----------
@@ -560,12 +584,12 @@ function App() {
 
   const content = (
     <div className="vg-view" key={tab}>
-      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} onStoryboard={doStoryboard} generating={generating}
+      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} onStoryboard={doStoryboard}
         tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} aspectId={aspectId} setAspectId={setAspectId}
         goNext={() => setTab('scenes')} />}
       {tab === 'scenes' && <ScenesView theme={theme} scenes={scenes} layout={editorLayout} onChange={updateScene} onMove={moveScene} onDelete={deleteScene} onImage={imageScene} onAdd={addScene} goBack={() => setTab('script')} goNext={() => setTab('style')} />}
       {tab === 'style' && <StyleView theme={theme} scenes={scenes} tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} aspectId={aspectId} setAspectId={setAspectId} styleId={styleId} setStyleId={setStyleId} voiceId={voiceId} setVoiceId={setVoiceId} musicId={musicId} setMusicId={setMusicId} goBack={() => setTab('scenes')} goNext={() => setTab('review')} />}
-      {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} aspectId={aspectId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} generating={generating} progress={progress} goBack={() => setTab('style')} />}
+      {tab === 'review' && <ReviewView theme={theme} mode={mode} scenes={scenes} tierId={tierId} resId={resId} aspectId={aspectId} styleId={styleId} voiceId={voiceId} musicId={musicId} onGenerate={doGenerate} goBack={() => setTab('style')} />}
       {tab === 'library' && <LibraryView theme={theme} generations={generations} clipsByStory={clipsByStory} selected={selected} toggleSelect={toggleSelect} onStitch={doStitch} onResume={doResume} onUseScript={useScript} onNew={resetAll} />}
     </div>
   );
@@ -617,6 +641,11 @@ function App() {
         </div>
       ) : (
         <main style={{ padding: '30px 32px 96px' }}>{content}</main>
+      )}
+
+      {/* ---------- GENERATIONS RAIL ---------- */}
+      {queue.length > 0 && (
+        <GenerationRail theme={theme} queue={queue} generations={generations} onDismiss={dismissQueueItem} onOpen={() => setTab('library')} />
       )}
 
       {/* ---------- BOTTOM CONTROL DOCK ---------- */}

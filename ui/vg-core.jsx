@@ -66,6 +66,8 @@ const VG_PRICING = {
   seedance: { '720p': 0.052, '1080p': 0.117 },     // observed billed rate incl. audio
   'seedance-fast': { '720p': 0.04035, '1080p': 0.04035 },  // listing rate; not resolution-tiered, unverified live
   'seedance-mini': { '480p': 0.01345, '720p': 0.01345 },   // listing rate 2026-08-13 (60% off promo); no 1080p
+  'seedance-2.5': { '480p': 0.2311, '720p': 0.2311 },      // OpenRouter provider table 2026-08-17, flat rate; no 1080p
+  'ark-seedance-mini': { '480p': 0.008, '720p': 0.008 },   // direct BytePlus billing — estimate only, no observed rate yet
 };
 function vgRate(tierId, resId) { return (VG_PRICING[tierId] || {})[resId] || 0; }
 
@@ -79,6 +81,8 @@ const VG_DURATIONS_BY_TIER = {
   seedance: [4, 5, 6, 7, 8, 9, 10, 11, 12],
   'seedance-fast': [4, 5, 6, 7, 8, 9, 10, 11, 12],
   'seedance-mini': [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+  'seedance-2.5': Array.from({ length: 27 }, (_, i) => i + 4),  // verified live: playground allows 4-30s
+  'ark-seedance-mini': [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],  // same range as OpenRouter's mini listing
 };
 const VG_DEFAULT_DURATIONS = [4, 6, 8];
 const VG_DURATIONS_UNION = [...new Set(Object.values(VG_DURATIONS_BY_TIER).flat().concat(VG_DEFAULT_DURATIONS))].sort((a, b) => a - b);
@@ -91,6 +95,8 @@ const VG_TIERS = [
   { id: 'seedance', icon: 'film', name: 'Seedance 1.5', tag: 'ByteDance · OpenRouter', perSec: 0.052, api: 'seedance', engine: 'ByteDance', blurb: 'Seedance 1.5 Pro — cinematic camera moves, native lip-synced audio.' },
   { id: 'seedance-fast', icon: 'zap', name: 'Seedance 2.0 Fast', tag: 'ByteDance · OpenRouter', perSec: 0.04035, api: 'seedance-fast', engine: 'ByteDance', blurb: 'Seedance 2.0 Fast — quicker, cheaper generations, slightly lower fidelity than 1.5 Pro.' },
   { id: 'seedance-mini', icon: 'film', name: 'Seedance 2.0 Mini', tag: 'ByteDance · OpenRouter', perSec: 0.01345, api: 'seedance-mini', engine: 'ByteDance', maxRes: '720p', blurb: 'Seedance 2.0 Mini — cheapest Seedance tier, 480p/720p only, clips up to 15s.' },
+  { id: 'seedance-2.5', icon: 'film', name: 'Seedance 2.5', tag: 'ByteDance · OpenRouter', perSec: 0.2311, api: 'seedance-2.5', engine: 'ByteDance', maxRes: '720p', blurb: 'Seedance 2.5 — long-form storytelling, multi-reference generation, clips up to 30s. 480p/720p only.' },
+  { id: 'ark-seedance-mini', icon: 'film', name: 'Direct - Seedance 2.0 mini', tag: 'ByteDance · Direct', perSec: 0.008, api: 'ark-seedance-mini', engine: 'ByteDance', maxRes: '720p', blurb: 'Seedance 2.0 Mini via BytePlus Ark directly (no OpenRouter markup). 480p/720p only, clips up to 15s.' },
 ];
 
 const VG_RESOLUTIONS = [

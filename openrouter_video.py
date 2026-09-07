@@ -61,6 +61,15 @@ MODELS = {
         # OpenRouter listing price 2026-08-13: $0.01345/s (60% off promo — may change); real cost taken from usage.cost
         "pricing": {"480p": 0.01345, "720p": 0.01345},
     },
+    "seedance-2.5": {
+        "slug": "bytedance/seedance-2.5",
+        "name": "Seedance 2.5",
+        "resolutions": {"480p", "720p"},            # verified live in OpenRouter playground 2026-08-17 — no 1080p size option
+        "durations": set(range(4, 31)),             # verified live: playground Seconds dropdown runs 4-30s
+        # OpenRouter provider table 2026-08-17: $0.2311/s flat (video-only and video+audio same rate);
+        # real cost taken from usage.cost
+        "pricing": {"480p": 0.2311, "720p": 0.2311},
+    },
 }
 
 POLL_INTERVAL_S = 10
@@ -178,6 +187,10 @@ def generate_clip(prompt: str, out_dir: Path, *, engine: str, image_path: Path |
         image_path = Path(image_path).resolve()
         if not image_path.is_file():
             raise ValueError(f"image not found: {image_path.name}")
+        if engine == "seedance-fast":
+            # ponytail: dreamina-seedance-2-0-fast rejects `resolution` on i2v requests
+            # (any value → 400 InvalidParameter); drop it, upgrade if OpenRouter fixes upstream.
+            payload.pop("resolution", None)
         payload["frame_images"] = [{
             "type": "image_url",
             "image_url": {"url": _image_data_url(image_path)},

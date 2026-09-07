@@ -162,7 +162,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId
 }
 
 // ---------- REVIEW VIEW ----------
-function ReviewView({ theme, mode, scenes, tierId, resId, aspectId, styleId, voiceId, musicId, onGenerate, generating, progress, goBack }) {
+function ReviewView({ theme, mode, scenes, tierId, resId, aspectId, styleId, voiceId, musicId, onGenerate, goBack }) {
   const tier = VG_TIERS.find(t => t.id === tierId);
   const res = VG_RESOLUTIONS.find(r => r.id === resId);
   const est = vgEstimate(scenes, tier, res);
@@ -216,27 +216,76 @@ function ReviewView({ theme, mode, scenes, tierId, resId, aspectId, styleId, voi
         </div>
       </VGCard>
 
-      {/* generate */}
-      {generating ? (
-        <VGCard theme={theme} style={{ padding: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div className="vg-spin" style={{ width: 20, height: 20, border: '3px solid ' + theme.primaryLight, borderTopColor: theme.primary, borderRadius: 999 }} />
-            <div style={{ fontWeight: 700, fontSize: 15, color: '#0f1419' }}>{progress.label}</div>
-            <div style={{ marginLeft: 'auto', fontWeight: 700, color: theme.primaryDark }}>{Math.round(progress.pct)}%</div>
-          </div>
-          <div style={{ height: 10, borderRadius: 999, background: '#eef0f2', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: progress.pct + '%', background: theme.hero, borderRadius: 999, transition: 'width .4s ease' }} />
-          </div>
-          <div style={{ fontSize: 12.5, color: '#9ca3af', marginTop: 10 }}>Generating scene {progress.scene} of {scenes.length}. You can keep this tab open — finished clips land in your Library.</div>
-        </VGCard>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
-          <VGButton theme={theme} variant="ghost" onClick={goBack}>← Style</VGButton>
-          <VGButton theme={theme} size="lg" onClick={onGenerate} style={{ flex: 1, maxWidth: 460 }}>
-            <VGIcon name="play" size={15} color="#fff" /> Generate {mode === 'story' ? 'story' : 'clip'} {mode === 'story' ? '(all scenes + stitch)' : ''}
-          </VGButton>
-        </div>
-      )}
+      {/* generate — fires into the background queue; watch progress in the rail on the right */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+        <VGButton theme={theme} variant="ghost" onClick={goBack}>← Style</VGButton>
+        <VGButton theme={theme} size="lg" onClick={onGenerate} style={{ flex: 1, maxWidth: 460 }}>
+          <VGIcon name="play" size={15} color="#fff" /> Generate {mode === 'story' ? 'story' : 'clip'} {mode === 'story' ? '(all scenes + stitch)' : ''}
+        </VGButton>
+      </div>
+      <div style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>Runs in the background — queue more while this one renders, and watch progress in the rail on the right.</div>
+    </div>
+  );
+}
+
+// ---------- GENERATION RAIL (right side — live queue of in-flight & finished generations) ----------
+function GenerationRail({ theme, queue, generations = [], onDismiss, onOpen }) {
+  const STATUS_META = {
+    queued:  { label: 'Queued',  color: '#6b7280', bg: '#f3f4f6' },
+    running: { label: 'Rendering', color: '#b45309', bg: '#fef3c7' },
+    done:    { label: 'Ready',   color: '#15803d', bg: '#dcfce7' },
+    failed:  { label: 'Failed',  color: '#dc2626', bg: '#fee2e2' },
+  };
+  return (
+    <div style={{
+      position: 'fixed', top: 84, right: 16, bottom: 90, width: 288, zIndex: 25,
+      display: 'flex', flexDirection: 'column', gap: 10,
+    }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#9ca3af', padding: '0 4px' }}>
+        Generations · {queue.length}
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingRight: 2 }}>
+        {queue.map(item => {
+          const meta = STATUS_META[item.status] || STATUS_META.queued;
+          const gen = item.status === 'done' && item.genId ? generations.find(g => g.id === item.genId) : null;
+          const clickable = item.status === 'done';
+          return (
+            <VGCard key={item.id} theme={theme} hover={clickable} onClick={clickable ? onOpen : undefined}
+              style={{ padding: 0, overflow: 'hidden', flexShrink: 0 }}>
+              <div style={{
+                aspectRatio: '16/9', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: gen && gen.thumb ? '#000' : `linear-gradient(135deg, ${(item.accent || SCENE_ACCENTS[0]).bg}, #fff 140%)`,
+              }}>
+                {gen && gen.thumb
+                  ? <img src={gen.thumb} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : item.status === 'failed'
+                    ? <div style={{ fontSize: 22, fontWeight: 800, color: '#dc2626' }}>!</div>
+                    : <VGIcon name="film" size={26} color={(item.accent || SCENE_ACCENTS[0]).fg} stroke={1.6} />}
+                <button onClick={e => { e.stopPropagation(); onDismiss(item.id); }} title="Remove"
+                  style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 999, border: 'none', background: 'rgba(15,20,25,0.55)', color: '#fff', cursor: 'pointer', fontSize: 11, lineHeight: 1 }}>✕</button>
+              </div>
+              <div style={{ padding: '10px 12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                  <VGPill color={meta.color} bg={meta.bg} style={{ fontSize: 10.5, padding: '2px 8px' }}>{meta.label}</VGPill>
+                </div>
+                <div style={{ fontWeight: 700, fontSize: 13, color: '#0f1419', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</div>
+                {item.status === 'running' || item.status === 'queued' ? (
+                  <>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label}</div>
+                    <div style={{ height: 6, borderRadius: 999, background: '#eef0f2', overflow: 'hidden', marginTop: 6 }}>
+                      <div style={{ height: '100%', width: item.pct + '%', background: theme.hero, borderRadius: 999, transition: 'width .4s ease' }} />
+                    </div>
+                  </>
+                ) : item.status === 'failed' ? (
+                  <div style={{ fontSize: 11, color: '#dc2626', marginTop: 2 }}>{item.error || 'generation failed'}</div>
+                ) : (
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{vgMoney(item.cost)} · tap to view</div>
+                )}
+              </div>
+            </VGCard>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -496,4 +545,4 @@ const thumbImg = { width: '100%', height: '100%', objectFit: 'cover' };
 const rowTitle = { fontSize: 12.5, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' };
 const rowSub = { fontSize: 11, color: '#9ca3af' };
 
-Object.assign(window, { StyleView, ReviewView, LibraryView, LibraryDrawer, vgEstimate });
+Object.assign(window, { StyleView, ReviewView, LibraryView, LibraryDrawer, GenerationRail, vgEstimate });

@@ -7,3 +7,5 @@ __pycache__/
 .claude/settings.local.json
 .claude/
 .superpowers/
+ConnectID-Certificates/
+ConnectID-Certificates.zip
