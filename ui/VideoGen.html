@@ -261,6 +261,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
   const [script, setScript] = useState(VG_DEFAULT_SCRIPT);
   const [scenes, setScenes] = useState(() => vgParseScript(VG_DEFAULT_SCRIPT));
   const lastScript = useRef(VG_DEFAULT_SCRIPT);
+  const [startPic, setStartPic] = useState(null);   // picture waiting to become scene 1's start image (sent from Pictures/Library)
 
   const [tierId, setTierId] = useState('lite');
   const [resId, setResId] = useState('720p');
@@ -292,7 +293,12 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
   useEffect(() => {
     if (script !== lastScript.current) {
       lastScript.current = script;
-      setScenes(prev => vgParseScript(script).map((p, i) => prev[i] ? { ...p, image: prev[i].image, duration: prev[i].duration } : p));
+      setScenes(prev => {
+        const next = vgParseScript(script).map((p, i) => prev[i] ? { ...p, image: prev[i].image, duration: prev[i].duration } : p);
+        if (startPic && next.length && !next[0].image) next[0] = { ...next[0], image: startPic };   // the waiting picture lands on scene 1
+        return next;
+      });
+      if (startPic && script.trim()) setStartPic(null);
     }
   }, [script]);
 
@@ -600,13 +606,21 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
     if (injected.kind === 'script') {
       setScript(injected.value); setMode('story'); setTab('script');
       showToast('Story loaded from chat — add pictures or go to Scenes');
-    } else if (injected.kind === 'ref') {
-      setRefImages(prev => [...prev, injected.value].slice(0, 3)); setTab('script');
-      showToast('Picture added as the character look');
-    } else if (injected.kind === 'scene') {
-      setScenes(sc => sc.map((x, i) => i === 0 ? { ...x, image: injected.value } : x)); setTab('scenes');
-      showToast('Picture set as the start of scene 1');
+      return;
     }
+    // A picture is being used for a video. Start from an EMPTY script (not the built-in sample story) so the child can write
+    // or generate their own — but never throw away a script they have actually worked on.
+    const untouched = !script.trim() || script === VG_DEFAULT_SCRIPT;
+    if (untouched) { setScript(''); lastScript.current = ''; setScenes([]); setMode('story'); }
+    if (injected.kind === 'ref') {
+      setRefImages(prev => [...prev, injected.value].slice(0, 3));
+      showToast(untouched ? 'Picture added as the character look — now write your story' : 'Picture added as the character look');
+    } else if (injected.kind === 'scene') {
+      if (untouched || !scenes.length) setStartPic(injected.value);
+      else setScenes(sc => sc.map((x, i) => i === 0 ? { ...x, image: injected.value } : x));
+      showToast(untouched ? 'Picture ready — now write your story or let Haiku write one' : 'Picture set as the start of scene 1');
+    }
+    setTab('script');
   }, [injected && injected.nonce]);
 
   const tier = VG_TIERS.find(x => x.id === tierId), res = VG_RESOLUTIONS.find(x => x.id === resId);
@@ -633,7 +647,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
 
   const content = (
     <div className="vg-view" key={tab}>
-      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} onStoryboard={doStoryboard}
+      {tab === 'script' && <ScriptView theme={theme} mode={mode} setMode={setMode} script={script} setScript={setScript} scenes={scenes} startPic={startPic} onClearStartPic={() => setStartPic(null)} onEnhance={doEnhance} enhancing={enhancing} onImages={handleStoryImages} refImages={refImages} onRefImages={handleRefImages} onRemoveRef={removeRefImage} onWrite={doWriteStory} writing={writing} onStoryboard={doStoryboard}
         tierId={tierId} setTierId={setTierId} resId={resId} setResId={setResId} aspectId={aspectId} setAspectId={setAspectId}
         goNext={() => setTab('scenes')} />}
       {tab === 'scenes' && <ScenesView theme={theme} scenes={scenes} layout={editorLayout} onChange={updateScene} onMove={moveScene} onDelete={deleteScene} onImage={imageScene} onAdd={addScene} goBack={() => setTab('script')} goNext={() => setTab('style')} />}

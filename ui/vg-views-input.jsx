@@ -3,7 +3,7 @@
    ============================================================ */
 
 // ---------- SCRIPT VIEW ----------
-function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance, enhancing, onImages, refImages = [], onRefImages, onRemoveRef, onWrite, writing, onStoryboard, generating, tierId, setTierId, resId, setResId, aspectId, setAspectId, goNext }) {
+function ScriptView({ theme, mode, setMode, script, setScript, scenes, startPic, onClearStartPic, onEnhance, enhancing, onImages, refImages = [], onRefImages, onRemoveRef, onWrite, writing, onStoryboard, generating, tierId, setTierId, resId, setResId, aspectId, setAspectId, goNext }) {
   const fileRef = React.useRef(null);
   const refFileRef = React.useRef(null);
   const boardRef = React.useRef(null);
@@ -47,6 +47,18 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, onEnhance
           ))}
         </div>
       </div>
+
+      {/* picture sent from Pictures/Library: waits here and becomes the start of scene 1 once there is a script */}
+      {startPic && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', borderRadius: 16, background: theme.tint, border: '1.5px solid ' + theme.primary }}>
+          <img src={startPic} alt="Start picture" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, color: theme.primaryDark }}>Picture ready for scene 1</div>
+            <div style={{ fontSize: 13.5, color: '#4b5563', marginTop: 2 }}>Write your script below, or let Haiku write one from an idea. This picture becomes the start of scene 1.</div>
+          </div>
+          <button onClick={onClearStartPic} style={{ border: 'none', background: 'transparent', color: '#6b7280', fontWeight: 700, cursor: 'pointer', padding: '6px 10px' }}>Remove</button>
+        </div>
+      )}
 
       {/* ── FROM IMAGE: one storyboard → auto movie (Haiku vision) ── */}
       {mode === 'board' && (
