@@ -4,7 +4,7 @@
 
 function vgEstimate(scenes, tier, res) {
   const seconds = scenes.reduce((a, s) => a + s.duration, 0);
-  const cost = seconds * vgRate(tier.id, res.id);
+  const cost = seconds * vgRate(tier.id, res.id) * vgMult();      // in the dollars people actually pay
   return { seconds, cost };
 }
 
@@ -129,10 +129,11 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId
       {/* sticky cost rail */}
       <div style={{ position: 'sticky', top: 18 }}>
         <VGCard theme={theme} style={{ padding: 20, background: theme.tint, border: '1.5px solid ' + theme.primary + '33' }}>
-          <VGOverline>Estimated cost</VGOverline>
+          <VGOverline>Ballpark price</VGOverline>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
-            <span style={{ fontFamily: "'Inter',sans-serif", fontWeight: 800, fontSize: 40, color: theme.primaryDark, letterSpacing: '-1px' }}>{vgMoney(est.cost)}</span>
+            <span style={{ fontFamily: "'Inter',sans-serif", fontWeight: 800, fontSize: 34, color: theme.primaryDark, letterSpacing: '-1px' }}>{vgBallpark(est.cost)}</span>
           </div>
+          <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 4 }}>A rough guide only — the final price is shown after your video is made.</div>
           <div style={{ fontSize: 13, color: '#6b7280', marginTop: 2 }}>{scenes.length} scenes · {est.seconds}s of video</div>
           <div style={{ height: 1, background: theme.primary + '22', margin: '16px 0' }} />
           <div style={{ display: 'grid', gap: 9, fontSize: 13.5 }}>
@@ -195,7 +196,7 @@ function ReviewView({ theme, mode, scenes, tierId, resId, aspectId, styleId, voi
       {/* per-scene breakdown */}
       <VGCard theme={theme} style={{ padding: 0, overflow: 'hidden' }}>
         <div style={{ padding: '13px 18px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700, color: '#9ca3af', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-          <span>Scene</span><span>Length · Cost</span>
+          <span>Scene</span><span>Length</span>
         </div>
         {scenes.map((s, i) => (
           <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 18px', borderBottom: i < scenes.length - 1 ? '1px solid #f6f7f8' : 'none' }}>
@@ -206,13 +207,12 @@ function ReviewView({ theme, mode, scenes, tierId, resId, aspectId, styleId, voi
             </div>
             <div style={{ textAlign: 'right', flexShrink: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#374151' }}>{s.duration}s</div>
-              <div style={{ fontSize: 12, color: theme.primaryDark, fontWeight: 600 }}>{vgMoney(s.duration * vgRate(tierId, resId))}</div>
             </div>
           </div>
         ))}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', background: theme.tint }}>
-          <span style={{ fontWeight: 700, color: '#374151' }}>Total — {scenes.length} clips + 1 stitch</span>
-          <span style={{ fontFamily: "'Inter',sans-serif", fontWeight: 800, fontSize: 22, color: theme.primaryDark }}>{vgMoney(est.cost)}</span>
+          <span style={{ fontWeight: 700, color: '#374151' }}>Ballpark — {scenes.length} clips + 1 stitch<br /><span style={{ fontWeight: 500, fontSize: 12.5, color: '#6b7280' }}>Final price is shown after your video is made.</span></span>
+          <span style={{ fontFamily: "'Inter',sans-serif", fontWeight: 800, fontSize: 22, color: theme.primaryDark }}>{vgBallpark(est.cost)}</span>
         </div>
       </VGCard>
 

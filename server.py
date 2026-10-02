@@ -47,6 +47,18 @@ try:
     PORT = int(os.environ.get("PORT") or 8767)         # hosting platforms (Render…) tell us which port to use
 except ValueError:
     PORT = 8767
+# What people see and pay is the provider's real cost × this (business margin). Credits, estimates, final prices and the
+# header total are all in these "user" dollars; meta.json on disk keeps the real provider cost. 1 = pass-through.
+def parse_price_multiplier(raw) -> float:
+    """VIDEOGEN_PRICE_MULTIPLIER → a sane factor: default 5, clamped to 1..100, junk/NaN/inf → default."""
+    try:
+        v = float(raw or 5)
+    except (TypeError, ValueError):
+        return 5.0
+    return min(100.0, max(1.0, v)) if v == v and v not in (float("inf"), float("-inf")) else 5.0
+
+
+PRICE_MULTIPLIER = parse_price_multiplier(os.environ.get("VIDEOGEN_PRICE_MULTIPLIER"))
 ROOT = Path(__file__).resolve().parent
 GENERATIONS = auth.DATA_DIR / "generations"            # same persistent folder as users.db (VIDEOGEN_DATA_DIR)
 ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
@@ -197,7 +209,7 @@ def job_update(job_id: str, **fields) -> None:
         # finished job holding a credit reservation → settle exactly once (failed = full refund)
         if job.get("status") in ("done", "failed") and job.get("reserved") and not job.get("settled"):
             job["settled"] = True
-            actual = auth.to_micro(job.get("cost") or 0) if job["status"] == "done" else 0
+            actual = auth.to_micro((job.get("cost") or 0) * PRICE_MULTIPLIER) if job["status"] == "done" else 0
             settle = (job["owner"], job["reserved"], actual)
     if settle:
         auth.settle(*settle)
@@ -807,7 +819,7 @@ class Handler(SimpleHTTPRequestHandler):
                 "title": str(payload.get("title") or "")[:200]}
         threading.Thread(target=run_story, args=(job_id, story_id, args, image_paths),
                          kwargs={"ref_paths": ref_paths}, daemon=True).start()
-        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4)})
+        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est * PRICE_MULTIPLIER, 4)})
 
     def _write_story(self):
         """Claude Haiku writes a full multi-scene script from a one-line idea."""
@@ -989,7 +1001,7 @@ class Handler(SimpleHTTPRequestHandler):
         # text-to-video per clip, with the cropped character reference applied to all (no start frame)
         threading.Thread(target=run_story, args=(job_id, story_id, args, []),
                          kwargs={"ref_paths": ref_paths}, daemon=True).start()
-        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4),
+        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est * PRICE_MULTIPLIER, 4),
                          "sceneCount": len(scenes), "title": title, "hasCharRef": bool(ref_paths)})
 
     @staticmethod
@@ -1130,7 +1142,7 @@ class Handler(SimpleHTTPRequestHandler):
                                  "created_at": meta.get("createdAt"),
                                  "ref_paths": ref_paths},
                          daemon=True).start()
-        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est, 4)})
+        self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est * PRICE_MULTIPLIER, 4)})
 
     def _enhance(self):
         """Rewrite each scene's script into a Veo animation prompt via Claude Haiku."""
@@ -1180,7 +1192,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _reserve_sync(self, est: float):
         """Hold est USD for a synchronous call. Returns the reserved micro-USD, or None after sending a 402."""
-        reserved, err = auth.reserve(self.user, est)
+        reserved, err = auth.reserve(self.user, est * PRICE_MULTIPLIER)
         if err:
             self._json(402, {"error": err})
             return None
@@ -1188,7 +1200,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _settle_sync(self, reserved: int, actual_usd: float) -> None:
         if reserved:                       # 0 = admin / free model → nothing was held
-            auth.settle(self.user["id"], reserved, auth.to_micro(actual_usd))
+            auth.settle(self.user["id"], reserved, auth.to_micro(actual_usd * PRICE_MULTIPLIER))
 
     def _chat(self):
         """Kid-safe chat turn: guard every message → reserve → model → settle → scan the reply before returning it."""
@@ -1294,7 +1306,7 @@ class Handler(SimpleHTTPRequestHandler):
             "engine": engine, "file": f"image.{ext}", "cost": round(cost, 4), "duration": 0,
             "hasReference": ref is not None,
         }, indent=2, ensure_ascii=False))
-        self._json(200, {"genId": gen_id, "url": f"/generations/{gen_id}/image.{ext}", "cost": round(cost, 4)})
+        self._json(200, {"genId": gen_id, "url": f"/generations/{gen_id}/image.{ext}", "cost": round(cost * PRICE_MULTIPLIER, 4)})
 
     def _stitch(self):
         payload = self._json_body()
@@ -1321,7 +1333,11 @@ class Handler(SimpleHTTPRequestHandler):
             job = dict(JOBS.get(job_id) or {})
         if not job or not (self.user["role"] == "admin" or job.get("owner") == self.user["id"]):
             return self._json(404, {"error": "unknown job"})
-        job.pop("owner", None)
+        for k in ("estCost", "cost"):                       # user-facing dollars (JOBS keeps the real provider cost)
+            if isinstance(job.get(k), (int, float)):
+                job[k] = round(job[k] * PRICE_MULTIPLIER, 4)
+        for k in ("owner", "reserved", "settled"):         # internals
+            job.pop(k, None)
         self._json(200, job)
 
     def _list(self):
@@ -1340,6 +1356,8 @@ class Handler(SimpleHTTPRequestHandler):
                 images = sorted([p.name for p in child.glob("start.*")] +
                                 [p.name for p in child.glob("src*.*") if p.suffix in (".png", ".jpg", ".webp")] +
                                 [p.name for p in child.glob("ref*.*") if p.suffix in (".png", ".jpg", ".webp")])
+                if isinstance(meta.get("cost"), (int, float)):
+                    meta = {**meta, "cost": round(meta["cost"] * PRICE_MULTIPLIER, 4)}      # the file on disk keeps the real cost
                 entries.append({
                     "id": child.name,
                     "meta": meta,
@@ -1538,7 +1556,7 @@ class Handler(SimpleHTTPRequestHandler):
     def _index(self):
         """Serve the SPA with the signed-in user injected (username is regex-restricted, so safe in a script)."""
         page = (ROOT / "ui" / "VideoGen.html").read_text(encoding="utf-8")
-        who = json.dumps({"username": self.user["username"], "role": self.user["role"]})
+        who = json.dumps({"username": self.user["username"], "role": self.user["role"], "priceMultiplier": PRICE_MULTIPLIER})
         data = page.replace("<head>", f"<head><script>window.VG_USER={who};</script>", 1).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1702,7 +1720,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _charge(self, job_id: str, est: float, cleanup=None) -> bool:
         """Reserve est USD from the user's credits; on refusal run cleanup, send 402 and return False."""
-        reserved, err = auth.reserve(self.user, est)
+        reserved, err = auth.reserve(self.user, est * PRICE_MULTIPLIER)
         if err:
             if cleanup:
                 cleanup()
@@ -1722,7 +1740,7 @@ class Handler(SimpleHTTPRequestHandler):
                          "unmetered": self.user["role"] == "admin",
                          "balance": acc["balance"] / auth.MICRO, "dailyCap": acc["daily_cap"] / auth.MICRO,
                          "spentToday": acc["spent_today"] / auth.MICRO, "engines": acc["engines"],
-                         "time": auth.time_status(self.user["id"])})
+                         "time": auth.time_status(self.user["id"]), "priceMultiplier": PRICE_MULTIPLIER})
 
     def _new_id(self, prompt: str) -> str:
         """make_id + record the current user as owner (story clips '<id>-cNN' inherit it)."""
@@ -1776,6 +1794,7 @@ if __name__ == "__main__":
     else:
         print("Admin account is already set up — sign in at /login with username 'admin'. No setup link is printed.")
     print("Sign-in: username + password + authenticator code (accounts in users.db)")
+    print(f"Price multiplier: x{PRICE_MULTIPLIER:g} (VIDEOGEN_PRICE_MULTIPLIER) — credits and shown prices = provider cost x this")
     print(f"Public hosts accepted: {', '.join(_public_hosts) or '(none — only localhost)'}")
     print(f"Open → http://127.0.0.1:{PORT}/")
     httpd = ThreadingHTTPServer((BIND_ADDR, PORT), Handler)

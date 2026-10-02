@@ -228,6 +228,17 @@ function vgParseScript(text) {
   });
 }
 
+// What people pay = real cost × this (set by the server, see VIDEOGEN_PRICE_MULTIPLIER).
+function vgMult() { return (window.VG_USER && window.VG_USER.priceMultiplier) || 1; }
+
+/** Rough price for something not yet made: "about $3.50". Rounded so it reads as a guide, never an exact figure. */
+function vgBallpark(n) {
+  if (!(n > 0)) return 'free';
+  const step = n < 1 ? 0.1 : n < 10 ? 0.5 : 1;
+  const v = Math.max(step, Math.round(n / step) * step);
+  return 'about $' + (v < 1 ? v.toFixed(2) : (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2)));
+}
+
 function vgMoney(n) {
   if (n === 0) return '$0.00';
   if (n < 0.1) return '$' + n.toFixed(3);
@@ -347,6 +358,6 @@ function vgReadImage(file) {
 
 Object.assign(window, {
   VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
-  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
+  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });

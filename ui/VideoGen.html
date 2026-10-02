@@ -560,7 +560,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
       const res = await fetch('/api/story/resume', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: storyId }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || res.statusText);
-      showToast(`Generating remaining scenes (est ${vgMoney(data.estCost || 0)})…`);
+      showToast(`Generating the remaining scenes (${vgBallpark(data.estCost || 0)} — final price shown when done)…`);
       const job = await pollJob(data.jobId, 1);
       setSession(s => ({ runs: s.runs + 1, cost: s.cost + (job.cost || 0) }));
       await loadLibrary();
@@ -695,7 +695,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
             <div style={{ height: 1, background: '#e8eaed', margin: '8px 8px' }} />
             <NavTab tb={TABS.find(x => x.id === 'library')} vertical />
             <div style={{ marginTop: 'auto', padding: 12, borderRadius: 12, background: theme.tint, fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>
-              <strong style={{ color: theme.primaryDark }}>{scenes.length} scenes</strong> · ~{est.seconds}s<br/>Est. {vgMoney(est.cost)}
+              <strong style={{ color: theme.primaryDark }}>{scenes.length} scenes</strong> · ~{est.seconds}s<br/>Ballpark {vgBallpark(est.cost)}
             </div>
           </aside>
           <main style={{ padding: '28px 32px 96px', minWidth: 0 }}>{content}</main>
