@@ -231,6 +231,26 @@ function vgParseScript(text) {
 // What people pay = real cost × this (set by the server, see VIDEOGEN_PRICE_MULTIPLIER).
 function vgMult() { return (window.VG_USER && window.VG_USER.priceMultiplier) || 1; }
 
+/** "Expires in 36 h" style label for a video's expiry time (ISO), or null. `soon` = under 12 hours left. */
+function vgExpiry(iso) {
+  if (!iso) return null;
+  const ms = new Date(iso).getTime() - Date.now();
+  if (isNaN(ms)) return null;
+  if (ms <= 0) return { text: 'Expiring now', soon: true };
+  const h = ms / 36e5;
+  if (h < 1) return { text: `Expires in ${Math.max(1, Math.round(ms / 6e4))} min`, soon: true };
+  if (h < 72) return { text: `Expires in ${Math.round(h)} h`, soon: h < 12 };
+  return { text: `Expires in ${Math.round(h / 24)} days`, soon: false };
+}
+
+/** Banner text explaining how long videos are kept (null when videos are kept forever). */
+function vgRetentionNote() {
+  const h = window.VG_USER && window.VG_USER.videoRetentionHours;
+  if (!h) return null;
+  const span = h % 24 === 0 ? `${h / 24} day${h === 24 ? '' : 's'}` : `${h} hours`;
+  return `Videos are removed ${h === 48 ? '48 hours' : span} after they are made — press Save to keep a copy. Pictures stay.`;
+}
+
 /** Rough price for something not yet made: "about $3.50". Rounded so it reads as a guide, never an exact figure. */
 function vgBallpark(n) {
   if (!(n > 0)) return 'free';
@@ -358,6 +378,6 @@ function vgReadImage(file) {
 
 Object.assign(window, {
   VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
-  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
+  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });

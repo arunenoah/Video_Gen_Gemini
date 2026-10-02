@@ -19,6 +19,8 @@ services:
         value: /var/data
       - key: VIDEOGEN_BIND
         value: 0.0.0.0
+      - key: VIDEOGEN_VIDEO_RETENTION_HOURS   # videos are deleted this many hours after creation; pictures are kept
+        value: "48"
       - key: VIDEOGEN_COOKIE_SECURE      # served over HTTPS by Render
         value: "1"
       - key: VIDEOGEN_TRUST_PROXY        # the app is reachable only through Render's proxy

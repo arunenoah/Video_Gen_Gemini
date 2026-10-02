@@ -485,7 +485,7 @@ function LibraryPane({ theme, onUseImage, toast, menuVisible }) {
           const m = e.meta || {}, isImg = kindOf(e) === 'image';
           const file = isImg ? (m.file || 'image.png') : (m.clipPath || 'clip.mp4');
           return { id: e.id, type: isImg ? 'image' : 'video', title: (m.prompt || '').replace(/^📖\s*/, '').slice(0, 80) || (isImg ? 'Picture' : 'Video'),
-                   when: m.createdAt, url: `/generations/${e.id}/${file}`, thumb: e.thumb || (isImg ? `/generations/${e.id}/${file}` : null), file };
+                   when: m.createdAt, expires: isImg ? null : m.expiresAt, url: `/generations/${e.id}/${file}`, thumb: e.thumb || (isImg ? `/generations/${e.id}/${file}` : null), file };
         }));
     }).catch(() => setItems({ error: true }));
   }, []);
@@ -515,6 +515,11 @@ function LibraryPane({ theme, onUseImage, toast, menuVisible }) {
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <h1 style={{ fontFamily: "'Inter',sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px', margin: '0 0 6px' }}>My Library</h1>
         <p style={{ margin: '0 0 18px', color: '#6b7280', fontSize: 15 }}>Everything you have made — pictures and videos. It is saved for you, on any device.</p>
+        {vgRetentionNote() && (
+          <div style={{ margin: '-6px 0 18px', padding: '10px 16px', borderRadius: 14, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: 14, fontWeight: 600 }}>
+            ⏳ {vgRetentionNote()}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>{chip('all', 'All')}{chip('image', 'Pictures')}{chip('video', 'Videos')}</div>
 
         {items === null && <div style={{ color: '#9ca3af' }}>Loading…</div>}
@@ -540,6 +545,7 @@ function LibraryPane({ theme, onUseImage, toast, menuVisible }) {
               <div style={{ padding: '10px 12px 12px' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#1f2933', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={i.title}>{i.title}</div>
                 <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 2 }}>{i.when ? new Date(i.when).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''}</div>
+                {vgExpiry(i.expires) && <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: vgExpiry(i.expires).soon ? '#b45309' : '#6b7280' }}>⏳ {vgExpiry(i.expires).text}</div>}
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   <a href={i.url} download={`${i.title.slice(0, 30) || 'sparkgarden'}-${i.id}`} style={{ ...chipBtn, padding: '5px 10px', fontSize: 12 }}><VGIcon name="download" size={13} /> Save</a>
                   <button onClick={() => remove(i.id)} style={{ ...chipBtn, padding: '5px 10px', fontSize: 12, color: sure === i.id ? '#fff' : '#b91c1c', background: sure === i.id ? '#dc2626' : '#fff', borderColor: sure === i.id ? '#dc2626' : '#fecaca' }}>

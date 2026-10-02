@@ -298,6 +298,11 @@ function LibraryView({ theme, generations, clipsByStory = {}, selected, toggleSe
 
   return (
     <div style={{ maxWidth: 1080, margin: '0 auto' }}>
+      {vgRetentionNote() && (
+        <div style={{ marginBottom: 16, padding: '10px 16px', borderRadius: 14, background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: 14, fontWeight: 600 }}>
+          ⏳ {vgRetentionNote()}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         {[
           ['film', generations.length, generations.length === 1 ? 'movie' : 'movies'],
@@ -361,6 +366,7 @@ function LibraryView({ theme, generations, clipsByStory = {}, selected, toggleSe
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 14.5, color: '#0f1419', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.title}</div>
                     <div style={{ fontSize: 12.5, color: '#9ca3af', marginTop: 3 }}>{g.sceneCount} clips · {g.when} · {vgMoney(g.cost)}</div>
+                    {vgExpiry(g.expiresAt) && <div style={{ fontSize: 12, fontWeight: 700, marginTop: 3, color: vgExpiry(g.expiresAt).soon ? '#b45309' : '#6b7280' }}>⏳ {vgExpiry(g.expiresAt).text}</div>}
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {(clipsByStory[g.id] || []).length > 0 && (
                         <button onClick={() => setOpenId(g.id)} style={{

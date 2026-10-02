@@ -23,7 +23,7 @@ import sys
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib import request as urllib_request
@@ -560,6 +560,99 @@ def _save_b64_images(raw_list: list, out_dir: Path, prefix: str, max_n: int):
     return paths, None
 
 
+# ── retention: video assets expire, pictures and scripts stay ─────────────────────────────────────────────────
+VIDEO_KINDS = {"clip", "story", "stitch"}             # everything that is a video; 'image' and 'script' are never expired
+
+
+def parse_retention_hours(raw) -> float:
+    """VIDEOGEN_VIDEO_RETENTION_HOURS → hours to keep videos. 0 / empty / junk = keep forever (safe default for local use)."""
+    try:
+        v = float(raw or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(v, 24.0 * 365) if v == v and v > 0 else 0.0
+
+
+VIDEO_RETENTION_HOURS = parse_retention_hours(os.environ.get("VIDEOGEN_VIDEO_RETENTION_HOURS"))
+ACTIVE_GENS: set[str] = set()                         # generations being produced right now — never purged
+
+
+def _tracked(gen_id: str, fn):
+    """Thread target that marks gen_id (and, for stories, its clip folders) as in use while it runs."""
+    def run(*args, **kwargs):
+        ACTIVE_GENS.add(gen_id)
+        try:
+            return fn(*args, **kwargs)
+        finally:
+            ACTIVE_GENS.discard(gen_id)
+    return run
+
+
+def video_expires_at(meta: dict, hours: float | None = None) -> str | None:
+    """ISO time a video expires, or None (not a video / retention off / no usable creation time)."""
+    hours = VIDEO_RETENTION_HOURS if hours is None else hours
+    if hours <= 0 or meta.get("kind") not in VIDEO_KINDS:
+        return None
+    try:
+        created = datetime.fromisoformat(str(meta["createdAt"]))
+    except (KeyError, ValueError):
+        return None
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return (created + timedelta(hours=hours)).isoformat()
+
+
+def purge_expired_videos(now: datetime | None = None, hours: float | None = None, dry_run: bool = False) -> list[str]:
+    """Delete video folders older than the retention window; returns the ids removed (or that would be, on a dry run).
+
+    Safe by construction: only direct children of generations/ with a valid id, a readable meta.json whose kind is a video
+    and a parseable creation time; never symlinks; never anything in ACTIVE_GENS (or a clip folder of an active story)."""
+    hours = VIDEO_RETENTION_HOURS if hours is None else hours
+    if hours <= 0 or not GENERATIONS.is_dir():
+        return []
+    now = now or datetime.now(timezone.utc)
+    removed: list[str] = []
+    for child in sorted(GENERATIONS.iterdir()):
+        name = child.name
+        if child.is_symlink() or not child.is_dir() or not ID_RE.match(name):
+            continue
+        if any(name == a or name.startswith(a + "-c") for a in list(ACTIVE_GENS)):
+            continue
+        expires = video_expires_at(_load_meta(name), hours)
+        if not expires or datetime.fromisoformat(expires) >= now:
+            continue                                          # not a video, no date, or still within its window
+        if not dry_run:
+            try:
+                shutil.rmtree(child)
+            except OSError as exc:
+                print(f"retention: could not remove {name}: {exc}")
+                continue
+            auth.release(name)
+        removed.append(name)
+    return removed
+
+
+def start_retention_thread(interval: int = 1800):
+    """Background cleanup every `interval` seconds (first run a minute after start). None when retention is off."""
+    if VIDEO_RETENTION_HOURS <= 0:
+        return None
+
+    def loop():
+        time.sleep(60)
+        while True:
+            try:
+                gone = purge_expired_videos()
+                if gone:
+                    print(f"retention: removed {len(gone)} video(s) older than {VIDEO_RETENTION_HOURS:g} h")
+            except Exception as exc:                          # the cleaner must never take the server down
+                print(f"retention: error {type(exc).__name__}: {exc}")
+            time.sleep(interval)
+
+    t = threading.Thread(target=loop, daemon=True, name="video-retention")
+    t.start()
+    return t
+
+
 def new_run_cost(total_cost: float, prior_ids: list[str]) -> float:
     """Provider cost of THIS run only. A resumed story's meta cost is cumulative (it sums every clip, old and new), but the
     earlier clips were already billed by the run that made them — charging the total again would bill them twice."""
@@ -753,7 +846,7 @@ class Handler(SimpleHTTPRequestHandler):
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=est)
         args = {"prompt": prompt, "tier": tier, "resolution": resolution,
                 "duration": duration, "aspect": aspect}
-        threading.Thread(target=run_generation, args=(job_id, gen_id, args, image_path, ref_paths),
+        threading.Thread(target=_tracked(gen_id, run_generation), args=(job_id, gen_id, args, image_path, ref_paths),
                          daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": gen_id})
 
@@ -843,7 +936,7 @@ class Handler(SimpleHTTPRequestHandler):
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=round(est, 4))
         args = {"scenes": scenes, "tier": tier, "resolution": resolution, "aspect": aspect,
                 "title": str(payload.get("title") or "")[:200]}
-        threading.Thread(target=run_story, args=(job_id, story_id, args, image_paths),
+        threading.Thread(target=_tracked(story_id, run_story), args=(job_id, story_id, args, image_paths),
                          kwargs={"ref_paths": ref_paths}, daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est * PRICE_MULTIPLIER, 4)})
 
@@ -1025,7 +1118,7 @@ class Handler(SimpleHTTPRequestHandler):
         args = {"scenes": scenes, "tier": tier, "resolution": resolution, "aspect": aspect,
                 "title": (title or "Storyboard")[:200]}
         # text-to-video per clip, with the cropped character reference applied to all (no start frame)
-        threading.Thread(target=run_story, args=(job_id, story_id, args, []),
+        threading.Thread(target=_tracked(story_id, run_story), args=(job_id, story_id, args, []),
                          kwargs={"ref_paths": ref_paths}, daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": story_id, "estCost": round(est * PRICE_MULTIPLIER, 4),
                          "sceneCount": len(scenes), "title": title, "hasCharRef": bool(ref_paths)})
@@ -1162,7 +1255,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._charge(job_id, est, None, "video", tier):
             return
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=round(est, 4))
-        threading.Thread(target=run_story,
+        threading.Thread(target=_tracked(story_id, run_story),
                          args=(job_id, story_id, args, image_paths),
                          kwargs={"prior_ids": meta.get("sourceIds") or [],
                                  "created_at": meta.get("createdAt"),
@@ -1356,7 +1449,7 @@ class Handler(SimpleHTTPRequestHandler):
         gen_id = self._new_id("stitched-video")
         job_id = uuid.uuid4().hex
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=0)
-        threading.Thread(target=run_stitch, args=(job_id, gen_id, ids), daemon=True).start()
+        threading.Thread(target=_tracked(gen_id, run_stitch), args=(job_id, gen_id, ids), daemon=True).start()
         self._json(202, {"jobId": job_id, "genId": gen_id})
 
     def _job(self, job_id: str):
@@ -1391,6 +1484,9 @@ class Handler(SimpleHTTPRequestHandler):
                                 [p.name for p in child.glob("ref*.*") if p.suffix in (".png", ".jpg", ".webp")])
                 if isinstance(meta.get("cost"), (int, float)):
                     meta = {**meta, "cost": round(meta["cost"] * PRICE_MULTIPLIER, 4)}      # the file on disk keeps the real cost
+                expires = video_expires_at(meta)
+                if expires:
+                    meta = {**meta, "expiresAt": expires}
                 entries.append({
                     "id": child.name,
                     "meta": meta,
@@ -1589,7 +1685,8 @@ class Handler(SimpleHTTPRequestHandler):
     def _index(self):
         """Serve the SPA with the signed-in user injected (username is regex-restricted, so safe in a script)."""
         page = (ROOT / "ui" / "VideoGen.html").read_text(encoding="utf-8")
-        who = json.dumps({"username": self.user["username"], "role": self.user["role"], "priceMultiplier": PRICE_MULTIPLIER})
+        who = json.dumps({"username": self.user["username"], "role": self.user["role"], "priceMultiplier": PRICE_MULTIPLIER,
+                          "videoRetentionHours": VIDEO_RETENTION_HOURS})
         data = page.replace("<head>", f"<head><script>window.VG_USER={who};</script>", 1).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1772,7 +1869,8 @@ class Handler(SimpleHTTPRequestHandler):
                          "unmetered": self.user["role"] == "admin",
                          "balance": acc["balance"] / auth.MICRO, "dailyCap": acc["daily_cap"] / auth.MICRO,
                          "spentToday": acc["spent_today"] / auth.MICRO, "engines": acc["engines"],
-                         "time": auth.time_status(self.user["id"]), "priceMultiplier": PRICE_MULTIPLIER})
+                         "time": auth.time_status(self.user["id"]), "priceMultiplier": PRICE_MULTIPLIER,
+                         "videoRetentionHours": VIDEO_RETENTION_HOURS})
 
     def _new_id(self, prompt: str) -> str:
         """make_id + record the current user as owner (story clips '<id>-cNN' inherit it)."""
@@ -1830,6 +1928,13 @@ if __name__ == "__main__":
         print("Admin account is already set up — sign in at /login with username 'admin'. No setup link is printed.")
     print("Sign-in: username + password + authenticator code (accounts in users.db)")
     print(f"Price multiplier: x{PRICE_MULTIPLIER:g} (VIDEOGEN_PRICE_MULTIPLIER) — credits and shown prices = provider cost x this")
+    if VIDEO_RETENTION_HOURS > 0:
+        pending = purge_expired_videos(dry_run=True)
+        print(f"Video retention: videos are deleted {VIDEO_RETENTION_HOURS:g} h after they are made (pictures and scripts are kept). "
+              f"{len(pending)} existing video(s) are already past that and will be removed within the first cleanup.")
+        start_retention_thread()
+    else:
+        print("Video retention: off (set VIDEOGEN_VIDEO_RETENTION_HOURS=48 to delete videos 48 h after they are made).")
     print(f"Public hosts accepted: {', '.join(_public_hosts) or '(none — only localhost)'}")
     print(f"Open → http://127.0.0.1:{PORT}/")
     httpd = ThreadingHTTPServer((BIND_ADDR, PORT), Handler)

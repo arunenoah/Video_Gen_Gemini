@@ -17,6 +17,7 @@ RUN chmod +x deploy/entrypoint.sh
 # Listens on $PORT (platforms set it; default 8767). Data folder is created/owned by the entrypoint.
 ENV VIDEOGEN_BIND=0.0.0.0 \
     VIDEOGEN_DATA_DIR=/var/data \
+    VIDEOGEN_VIDEO_RETENTION_HOURS=48 \
     PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["/app/deploy/entrypoint.sh"]

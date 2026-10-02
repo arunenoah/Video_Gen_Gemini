@@ -185,6 +185,7 @@ function entryToGen(entry, i) {
     res: m.resolution || '',
     sceneCount: (m.sourceIds || []).length || 1,
     when: fmtWhen(m.createdAt),
+    expiresAt: m.expiresAt || null,
     thumb: entry.thumb || null,
     images: entry.images || [],
     costNote: m.costNote || null,
