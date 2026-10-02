@@ -1,0 +1,26 @@
+{
+  "id": "starfish-on-the-reef",
+  "title": "Finding a starfish on the reef",
+  "summary": "A swimmer discovers a starfish: one start picture, five seconds of animation.",
+  "kind": "story",
+  "engine": "Seedance 2.0 Mini",
+  "resolution": "720p",
+  "aspect": "9:16",
+  "duration": 5,
+  "scenes": [
+    {
+      "n": 1,
+      "duration": 5,
+      "prompt": "3D Pixar-style cartoon animation, bright friendly colors, expressive characters. Maintain the exact art style, characters, lighting and layout of the starting frame.\n\nUse the Scene 1-style four-armed orange sea star as the Scene 6 starting reference. Maintain identical Dad, Kiki, Chindu, scuba outfits, faces, reef environment and cinematic 3D animation. Vertical 9:16.\n\n0.0–0.7s — IMMEDIATE NEW SURPRISE: Start with movement on frame one. A second, slightly smaller orange sea star with four developed arms and one short developing fifth arm rapidly crawls across another section of the reef. Camera races alongside it. Kiki and Chindu immediately swim after it while Dad points.\n\nKiki, shocked:\n“Another one?!”\n\n0.7–1.5s — EXPLANATION DURING ACTION: Camera rapidly orbits the moving second sea star. Fish streak across foreground and bubbles rush upward.\n\nThe short fifth arm begins naturally lengthening.\n\nDad:\n“In some species, a piece with part of the center…”\n\nNobody stops moving while Dad speaks.\n\n1.5–2.4s — FAST TIME SHIFT: A large colorful fish crosses extremely close to camera creating a natural wipe.\n\nAfter the wipe, the fifth arm is noticeably longer. Camera drops to seabed level and tracks beside it.\n\nDad continues:\n“…can grow into a whole new sea star!”\n\n2.4–3.2s — ⭐ SECOND REVEAL: Camera rapidly cranes upward as the final arm finishes growing naturally.\n\nReveal a beautiful, complete five-armed second sea star.\n\nKiki swims around it in disbelief.\n\nKiki:\n“WHAT?!”\n\n3.2–4.1s — BIGGER PAYOFF: Camera whip-pans across the reef.\n\nReveal the original larger five-armed starfish from Scene 5 crawling into frame from the opposite direction.\n\nNow TWO complete sea stars are clearly visible simultaneously.\n\nChindu:\n“There are TWO!”\n\n4.1–5.0s — FINAL WOW + LOOP: Both sea stars crawl past Kiki in opposite directions. Kiki spins around trying to follow both while Dad and Chindu swim behind her.\n\nCamera rapidly pulls upward into a beautiful overhead shot showing:\n\n⭐ ORIGINAL STARFISH + ⭐ NEW STARFISH\n\nThen one sea star crawls extremely close beneath the camera until one arm fills the frame, creating a natural visual wipe that can cut back toward Scene 1.\n\nCritical pacing\n\nNo dead space. No pauses. No static celebration. No characters hovering to deliver dialogue.\n\nVisual change every 0.7–1 second:\n\nSECOND STARFISH → arm grows → fish wipe → arm longer → complete starfish → WHIP-PAN → TWO STARFISH → overhead WOW → loop\n\nScientific lock\n\nDo not imply every detached sea-star arm can become another animal. Dad must specifically say:\n\n“In some species, a piece with part of the center can grow into a whole new sea star!”\n\nNo blood, wounds, magical glow, sparks or instant magical transformation.\n\nThis approach sacrifices showing the complicated intermediate anatomy, but that's the right trade-off here: the child understands the result immediately, while Dad's line keeps the science accurate.\n\nNarration voice: a warm, sunny female narrator.\n\nPlayful, upbeat background music.\n\nNo text overlays, no logos, no watermarks."
+    }
+  ],
+  "assets": [
+    {
+      "file": "asset01.jpg",
+      "role": "scene",
+      "label": "Scene picture"
+    }
+  ],
+  "video": "clip.mp4",
+  "poster": "poster.jpg"
+}

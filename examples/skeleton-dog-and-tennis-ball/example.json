@@ -1,0 +1,26 @@
+{
+  "id": "skeleton-dog-and-tennis-ball",
+  "title": "The skeleton dog and the tennis ball",
+  "summary": "One start picture and one detailed prompt bring a playful skeleton dog to life.",
+  "kind": "story",
+  "engine": "Seedance 2.0 Mini",
+  "resolution": "720p",
+  "aspect": "9:16",
+  "duration": 15,
+  "scenes": [
+    {
+      "n": 1,
+      "duration": 15,
+      "prompt": "3D Pixar-style cartoon animation, bright friendly colors, expressive characters. Maintain the exact art style, characters, lighting and layout of the starting frame.\n\nCreate ONE continuous 15-second cinematic vertical video based on the reference image.\n\nThe skeleton dog is the only main character. Preserve the exact same skeleton dog throughout: identical skull, skeletal anatomy, body proportions, blue collar, round paw tag and playful personality. Keep the same bright sunny suburban backyard.\n\n0–2 seconds — INSTANT HOOK:\nStart with an extreme close-up of a human HAND holding a bright green tennis ball near the camera. Do NOT show the person's face or full body. Behind the ball, the skeleton dog is already extremely excited—bouncing on its front paws, staring intensely at the ball, jaw open happily and vertebral tail rattling rapidly.\n\nOff-camera voice: “Ready?”\n\nThe hand quickly pulls backward and throws the tennis ball.\n\n2–5 seconds — CHASE:\nFollow the green tennis ball with a fast cinematic whip-pan. The skeleton dog instantly explodes into a sprint after it.\n\nTransition smoothly into a very low ground-level tracking shot alongside the running skeleton dog. Its four skeletal legs move naturally like a real running dog. Grass kicks up beneath its paws. The green tennis ball remains clearly visible ahead.\n\nOff-camera voice: “GO!”\n\n5–8 seconds — WOW / COMEDY MOMENT:\nThe tennis ball bounces once.\n\nSkeleton dog makes a dramatic leap toward it.\n\nWhile airborne, ONE single long lower-leg bone from ONE rear leg accidentally pops cleanly loose with a funny harmless POP!\n\nBrief cinematic slow motion.\n\nClearly show TWO objects flying through the same frame:\n\n1. Bright GREEN tennis ball\n2. ONE WHITE dog bone\n\nThe dog notices the flying bone and looks surprised.\n\nNo pain. No injury. Pure physical comedy.\n\nThe tennis ball lands and rolls to the LEFT.\n\nThe detached bone lands and bounces to the RIGHT.\n\n8–11 seconds — THE CHOICE:\nDog lands safely and immediately stops between the two objects.\n\nCamera moves closer to the dog's skull.\n\nDog looks LEFT at the tennis ball.\n\nThen RIGHT at its bone.\n\nLEFT again.\n\nRIGHT again.\n\nCute confused head tilt.\n\nMusic completely stops for a brief comedic pause.\n\n11–15 seconds — PAYOFF:\nDog suddenly makes its decision.\n\nIt completely IGNORES THE TENNIS BALL.\n\nIt excitedly hops a short distance toward its detached bone, grabs its own bone horizontally in its mouth, turns around and proudly runs/hops directly toward the camera.\n\nKeep the abandoned green tennis ball clearly visible behind the dog for a moment so viewers instantly understand the joke.\n\nOff-camera owner laughs:\n\n“That's YOUR bone!”\n\nDog approaches very close to camera proudly carrying its own bone, skeletal tail wagging wildly.\n\nFinish with the happy skeleton dog's skull filling the frame, bone held in its mouth.\n\nHARD CUT.\n\nCAMERA: extreme close-up hook → whip-pan with ball → low tracking chase → brief slow-motion leap → clear wide ball-vs-bone composition → skull reaction close-up → backward tracking payoff.\n\nAUDIO: playful energetic music, excited bark, bone-tail clattering, ball whoosh, fast skeletal footsteps, clear comedic POP, bone clink-clink, tennis-ball bounce, sudden silence during the choice, happy bark and owner laughter at the end.\n\nSTRICT CONTINUITY: Same skeleton dog for the entire video. Same skull, collar, tag, bone proportions and size. Dog begins with exactly four legs. Only ONE rear-leg bone detaches. Only ONE loose bone exists. The missing bone must remain missing while the dog carries it.\n\nDO NOT show a human face or full human character. Human presence is limited to the hand/forearm throwing the ball and the off-camera voice.\n\nNo fur, skin, flesh, muscles, organs, blood, wounds, pain, horror, costume, transformation, extra legs, duplicated bones, duplicated balls or duplicated dogs.\n\nNarration voice: a warm, sunny female narrator.\n\nPlayful, upbeat background music.\n\nNo text overlays, no logos, no watermarks."
+    }
+  ],
+  "assets": [
+    {
+      "file": "asset01.jpg",
+      "role": "scene",
+      "label": "Scene picture"
+    }
+  ],
+  "video": "clip.mp4",
+  "poster": "poster.jpg"
+}
