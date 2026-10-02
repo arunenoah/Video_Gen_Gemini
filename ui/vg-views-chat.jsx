@@ -341,7 +341,10 @@ const chipBtn = { display: 'inline-flex', alignItems: 'center', gap: 6, padding:
 const menuItem = { display: 'block', width: '100%', textAlign: 'left', padding: '10px 12px', border: 'none', background: 'transparent', borderRadius: 10, cursor: 'pointer', fontSize: 13.5, color: '#374151', lineHeight: 1.35 };
 
 // ---------- one conversation (chat or image) ----------
-function ConversationView({ theme, kind, user, models, conv, convId, upsert, onUseScript, onUseImage, onDraw, prefill, toast, narrow }) {
+function ConversationView({ theme, kind, user, models, conv, convId, upsert, onUseScript, onUseImage, onDraw, onPrefillPicture, prefill, toast, narrow }) {
+  const [fmtFor, setFmtFor] = useS(null);                // id of the chat answer whose "how to explain" strip is open
+  const [fmtOpen, setFmtOpen] = useS(false);              // Pictures page: strip open?
+  const [localPrefill, setLocalPrefill] = useS(null);
   const scroller = useR(null);
   const [busy, setBusy] = useS(false);
   const msgs = conv ? conv.messages : [];
@@ -442,8 +445,13 @@ function ConversationView({ theme, kind, user, models, conv, convId, upsert, onU
                               const q = msgs.slice(0, msgs.indexOf(m)).reverse().find(x => x.role === 'user');
                               return q ? <button onClick={() => onDraw(((q.text || q.shownText) || '').slice(0, 300))} style={chipBtn}><VGIcon name="brush" size={14} /> Draw this</button> : null;
                             })()}
+                            {kind === 'chat' && !m.filtered && m.text.length > 80 && onPrefillPicture && <button onClick={() => setFmtFor(fmtFor === m.id ? null : m.id)} style={chipBtn}><VGIcon name="wand" size={14} /> How do you want it explained?</button>}
                             {kind === 'chat' && !m.filtered && m.text.length > 120 && <button onClick={() => onUseScript(m.text)} style={chipBtn}><VGIcon name="film" size={14} /> Make a video from this</button>}
                           </div>
+                          {fmtFor === m.id && kind === 'chat' && (() => {
+                            const q = msgs.slice(0, msgs.indexOf(m)).reverse().find(x => x.role === 'user');
+                            return <FormatPicker theme={theme} question={q ? (q.text || q.shownText || '') : ''} onPick={(p) => { setFmtFor(null); onPrefillPicture(p); }} />;
+                          })()}
                         </>}
                   </div>
                 </div>
@@ -459,7 +467,13 @@ function ConversationView({ theme, kind, user, models, conv, convId, upsert, onU
         )}
       </div>
 
-      <Composer theme={theme} busy={busy} disabled={!active} onNotice={toast} prefill={prefill}
+      {kind === 'image' && (
+        <div style={{ maxWidth: 760, width: '100%', margin: '0 auto', padding: '0 20px', boxSizing: 'border-box' }}>
+          <button onClick={() => setFmtOpen(o => !o)} style={{ ...chipBtn, marginBottom: 6 }}><VGIcon name="wand" size={14} /> {fmtOpen ? 'Hide' : 'Explain a topic with a picture'}</button>
+          {fmtOpen && <FormatPicker theme={theme} askTopic onPick={(p) => { setLocalPrefill({ text: p, nonce: Date.now() }); setFmtOpen(false); }} />}
+        </div>
+      )}
+      <Composer theme={theme} busy={busy} disabled={!active} onNotice={toast} prefill={localPrefill || prefill}
         canAttach={!!pictureModel} attachHint={kind === 'chat' ? 'Ask an admin to turn on the helper that can look at pictures.' : 'Ask an admin to turn on the model that can use your drawing.'}
         onAttached={() => { if (!(active && active.pictures) && pictureModel) { setEngine(pictureModel.id); try { localStorage.setItem(modelKey, pictureModel.id); } catch (x) {} toast(`Switched to ${pictureModel.label.split(' (')[0]} so it can use your picture`); } }}
         placeholder={!active ? (models === null ? 'Loading…' : 'No helpers available') : (kind === 'chat' ? 'Message Sunny…' : 'Describe the picture you want…')}
@@ -717,6 +731,7 @@ function Sidebar({ theme, mode, setMode, convs, activeId, onNew, onSelect, onDel
         {modeBtn('video', 'film', 'Videos')}
         {modeBtn('library', 'grid', 'My Library')}
         {modeBtn('examples', 'star', 'Examples')}
+        {modeBtn('lab', 'wand', 'Prompt Lab')}
         {user.role === 'admin' && (
           <>
             <div style={{ height: 1, background: '#e8eaed', margin: '8px 6px' }} />
@@ -757,7 +772,7 @@ function AppShell({ theme, renderVideo }) {
   const [mode, setModeState] = useS(() => {
     try {
       const m = localStorage.getItem('vg_mode');
-      return ['chat', 'image', 'video', 'library', 'examples'].includes(m) || (m === 'users' && user.role === 'admin') ? m : 'chat';   // 'users' is admin-only
+      return ['chat', 'image', 'video', 'library', 'examples', 'lab'].includes(m) || (m === 'users' && user.role === 'admin') ? m : 'chat';   // 'users' is admin-only
     } catch (e) { return 'chat'; }
   });
   const [videoSeen, setVideoSeen] = useS(false);
@@ -831,6 +846,7 @@ function AppShell({ theme, renderVideo }) {
     } catch (e) { toast('Could not load that picture'); }
   }
   const drawThis = (question) => { setPrefill({ text: `Draw a bright, friendly picture that helps explain: ${question}`, nonce: Date.now() }); setMode('image'); };
+  const prefillPicture = (text) => { setPrefill({ text, nonce: Date.now() }); setMode('image'); };
   const useScript = (text) => { setInjected({ kind: 'script', value: text, nonce: Date.now() }); setMode('video'); };
 
   const menuBtn = (!open || narrow) && (
@@ -862,11 +878,12 @@ function AppShell({ theme, renderVideo }) {
           </div>
         )}
         {locked && (mode === 'chat' || mode === 'image' || mode === 'video') && <LockedPane theme={theme} menuVisible={!open || narrow} onLibrary={() => setMode('library')} />}
+        {mode === 'lab' && <PromptLabPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
         {mode === 'examples' && <ExamplesPane key={viewKey} theme={theme} onUseScript={useScript} menuVisible={!open || narrow} />}
         {mode === 'library' && <LibraryPane key={viewKey} theme={theme} onUseImage={useImage} toast={toast} menuVisible={!open || narrow} />}
         {isConv && !locked && <ConversationView key={mode + viewKey} theme={theme} kind={mode} user={user}
               models={models ? (models.error ? { error: true } : models[mode]) : null} conv={conv} convId={convId} upsert={upsertActive}
-              onUseScript={useScript} onUseImage={useImage} onDraw={drawThis} prefill={mode === 'image' ? prefill : null} toast={toast} narrow={narrow} />}
+              onUseScript={useScript} onUseImage={useImage} onDraw={drawThis} onPrefillPicture={prefillPicture} prefill={mode === 'image' ? prefill : null} toast={toast} narrow={narrow} />}
         {toastMsg && <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: '#0f1419', color: '#fff', padding: '11px 20px', borderRadius: 999, fontWeight: 700, fontSize: 14, boxShadow: '0 12px 32px rgba(0,0,0,.28)' }}>{toastMsg}</div>}
       </main>
       </div>

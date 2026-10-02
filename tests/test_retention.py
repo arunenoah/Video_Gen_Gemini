@@ -65,6 +65,15 @@ class PurgeTests(unittest.TestCase):
         self.assertEqual(set(removed), {"old-clip", "old-story", "old-story-c01", "old-stitch"})
         self.assertEqual(self.left(), {"old-image", "old-script", "fresh-clip"})
 
+    def test_should_remove_the_scene_words_with_the_video_but_keep_a_written_script(self):
+        story = self.make("old-story", "story", 60, prompt="a penguin finds a red balloon", scenes=[{"prompt": "scene one words"}])
+        clip = self.make("old-story-c01", "clip", 60, storyId="old-story", prompt="scene one words")
+        script = self.make("old-script", "script", 60, prompt="a penguin tale", script="Once upon a time")
+        server.purge_expired_videos(NOW)
+        for gone in (story, clip):
+            self.assertFalse(gone.exists())                          # folder, meta.json and the prompt inside it are all gone
+        self.assertIn("Once upon a time", (script / "meta.json").read_text())   # a written script is not a video
+
     def test_should_expire_strictly_after_the_window(self):
         self.make("exactly-48h", "clip", 48)
         self.make("just-over", "clip", 48.0003)                    # ~1 second past

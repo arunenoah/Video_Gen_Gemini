@@ -585,6 +585,50 @@ def _save_b64_images(raw_list: list, out_dir: Path, prefix: str, max_n: int):
     return paths, None
 
 
+# ── public parents page: GET /parents (no sign-in). Numbers in the text come from the live settings, so it can't drift ──
+PUBLIC_UI_FILES = {                                   # exact paths only — everything else under /ui/ needs sign-in
+    "/ui/login-hero-v2.jpg": ("login-hero-v2.jpg", "image/jpeg"),
+    "/ui/parents-lab.jpg": ("parents-lab.jpg", "image/jpeg"),
+    "/ui/parents-blocked.jpg": ("parents-blocked.jpg", "image/jpeg"),
+    "/ui/parents-example.jpg": ("parents-example.jpg", "image/jpeg"),
+    "/ui/parents-hero.webp": ("parents-hero.webp", "image/webp"),
+    **{f"/ui/parents-ic-{n}.png": (f"parents-ic-{n}.png", "image/png")
+       for n in ("sprout", "chat", "palette", "bulb", "shield", "sliders", "lock", "pencil")},
+}      # exact paths only — everything else under /ui/ needs sign-in
+
+
+def _join_or(nums) -> str:
+    items = [str(n) for n in nums]
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " or " + items[-1]
+
+
+def parents_context() -> dict:
+    """Replacement text for the {{...}} markers in ui/parents.html (all values are built here — no user input)."""
+    hours = VIDEO_RETENTION_HOURS
+    if hours:
+        h = int(hours) if float(hours).is_integer() else hours
+        retention = (f"Deleted automatically {h} hours after they are made, together with the words used for each scene. "
+                     "The child can also delete a video sooner.")
+    else:
+        retention = "Kept until deleted, with the words used for each scene. The child can delete a video from My Library."
+    if USER_DURATIONS:
+        clip_text = f"Children can make clips of {_join_or(USER_DURATIONS)} seconds."
+        clip_control = f"Children can only make clips of {_join_or(USER_DURATIONS)} seconds. Adults are not limited."
+    else:
+        clip_text = "Clip length depends on the engine chosen."
+        clip_control = "No clip-length limit is set for children at the moment."
+    logo = f'<img src="{auth._LOGO}" alt="">' if auth._LOGO else ""
+    return {"{{LOGO}}": logo, "{{STRIKES}}": str(auth.STRIKE_LIMIT), "{{RETENTION_TEXT}}": retention,
+            "{{CLIP_TEXT}}": clip_text, "{{CLIP_CONTROL}}": clip_control}
+
+
+def render_parents() -> str:
+    page = (ROOT / "ui" / "parents.html").read_text(encoding="utf-8")
+    for marker, text in parents_context().items():
+        page = page.replace(marker, text)
+    return page
+
+
 # ── curated examples: read-only samples (video + prompt + pictures) shown to every signed-in user ──────────────────────────
 # Bundled in the repo (tools/bundle_example.py), so they are reviewed before shipping and are untouched by video retention.
 EXAMPLES_DIR = ROOT / "examples"
@@ -788,8 +832,10 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._host_ok():
             return
         path = self.path.split("?", 1)[0]
-        if path == "/ui/login-hero-v2.jpg":                 # the only asset the sign-in page needs before anyone is signed in
-            return self._public_hero()
+        if path in PUBLIC_UI_FILES:                         # the few assets the sign-in and parents pages need before anyone is signed in
+            return self._public_file(PUBLIC_UI_FILES[path])
+        if path in ("/parents", "/parents/") or (path == "/" and not self._authed()):
+            return self._html(200, render_parents())        # public landing page: shared links and first visits land here, signed-in users get the app
         if path == "/login":
             return self._html(200, auth.login_page())
         if path == "/login/2fa":
@@ -874,6 +920,8 @@ class Handler(SimpleHTTPRequestHandler):
             return self._chat()
         if self.path == "/api/image":
             return self._image()
+        if self.path == "/api/story-review":
+            return self._story_review()
         self.send_error(404)
 
     def do_DELETE(self):
@@ -1496,6 +1544,38 @@ class Handler(SimpleHTTPRequestHandler):
                                              "want a fun fact or a riddle?", "filtered": True})
         self._json(200, {"reply": text, "filtered": False})
 
+    def _story_review(self):
+        """Prompt Lab "Ask Sunny": guard the story → reserve → review → settle → scan the reply before returning it."""
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+        engine = str(payload.get("engine", "chat-deepseek"))
+        if engine not in openrouter_chat.CHAT_MODELS:
+            return self._json(400, {"error": "unknown chat model"})
+        story = str(payload.get("story", "")).strip()
+        if not 20 <= len(story) <= openrouter_chat.STORY_REVIEW_MAX:
+            return self._json(400, {"error": f"write 20-{openrouter_chat.STORY_REVIEW_MAX} characters of story first"})
+        if self._engine_denied(engine) or not self._guard(story, "story-review"):
+            return
+        reserved = self._reserve_sync(openrouter_chat.estimate_review_cost(engine, story))
+        if reserved is None:
+            return
+        try:
+            text, cost = openrouter_chat.review_story(engine, story)
+        except Exception as exc:
+            self._settle_sync(reserved, 0)
+            print(f"story review error: {_redact(str(exc))[:200]}")
+            return self._json(502, {"error": "Sunny is taking a short nap. Please try again in a moment."})
+        self._settle_sync(reserved, cost)
+        self._log_usage("chat", engine, cost, reserved)
+        if not text:
+            return self._json(502, {"error": "Sunny didn't have feedback that time. Try again!"})
+        verdict = safety.check(text)
+        if not verdict.allowed:
+            auth.record_violation(self.user, verdict.category or "other", "story-review:output", text, strike=False)
+            return self._json(200, {"reply": "Hmm, I can't share my thoughts on that one. Try a different story!", "filtered": True})
+        self._json(200, {"reply": text, "filtered": False})
+
     def _image(self):
         """Text → image: guard the prompt → reserve → generate → settle → save as a library item."""
         payload = self._json_body()
@@ -1767,12 +1847,14 @@ class Handler(SimpleHTTPRequestHandler):
     def _origin(self) -> str:
         return f"{'https' if COOKIE_SECURE else 'http'}://{self.headers.get('Host', '')}"
 
-    def _public_hero(self):
-        data = (ROOT / "ui" / "login-hero-v2.jpg").read_bytes()
+    def _public_file(self, entry: tuple):
+        name, ctype = entry                               # from the PUBLIC_UI_FILES allow-list, never from the request
+        data = (ROOT / "ui" / name).read_bytes()
         self.send_response(200)
-        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(data)
 

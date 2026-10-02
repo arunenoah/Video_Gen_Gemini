@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>For Parents: Learning &amp; Safety | SparkGarden</title>
+<style>
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+:root{--navy:#12274a;--ink:#26384f;--mute:#5f7088;--line:#e1e9f2;--blue:#1f6fdc;--blue-dark:#1859b3;--band:#e9f3fe;--cream:#fffdf8;--amber:#fff3d4;--amber-line:#ecd69b;--serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif}
+body{margin:0;background:linear-gradient(#fffdf8,#f6faff 40%,#fffdf8);color:var(--ink);font:17px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+a{color:var(--blue)}
+a:focus-visible,summary:focus-visible,.btn:focus-visible{outline:3px solid #e0a521;outline-offset:3px}
+.skip{position:absolute;left:-999px}.skip:focus{left:12px;top:12px;background:#fff;padding:10px;z-index:30}
+.wrap{max-width:1040px;margin:auto;padding:0 28px}
+
+/* header */
+header.top{position:sticky;top:0;z-index:20;background:rgba(255,253,248,.97);border-bottom:1px solid var(--line)}
+.bar{max-width:1040px;margin:auto;padding:12px 28px;display:flex;align-items:center;gap:24px}
+.brand{display:flex;align-items:center;gap:10px;font:700 25px/1 var(--serif);color:var(--navy);text-decoration:none;white-space:nowrap}
+.brand img{width:34px;height:34px;border-radius:9px}
+nav{display:flex;gap:2px 26px;flex-wrap:wrap;margin-left:auto;align-items:center}
+nav a{color:var(--navy);text-decoration:none;font-weight:600;font-size:15px;padding:4px 0;border-bottom:2px solid transparent}
+nav a:hover{border-bottom-color:var(--blue)}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--blue);color:#fff!important;font-weight:700;font-size:16px;padding:12px 24px;border-radius:10px;text-decoration:none;border:0;box-shadow:0 2px 0 rgba(18,39,74,.12)}
+.btn:hover{background:var(--blue-dark)}
+nav .btn{padding:9px 20px;font-size:15px;border-bottom:0}
+
+/* hero */
+.hero{position:relative;overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:1.2fr 1fr;gap:10px;align-items:center;min-height:430px;padding-top:30px;padding-bottom:10px}
+.chip{display:inline-block;background:#e4effd;color:#2a5ca8;font-size:13px;font-weight:700;letter-spacing:.04em;padding:5px 14px;border-radius:999px}
+h1{font:700 clamp(38px,5.2vw,60px)/1.04 var(--serif);color:var(--navy);margin:16px 0 18px;letter-spacing:-.01em}
+.sub{font-size:21px;line-height:1.5;color:var(--ink);max-width:470px;margin:0 0 26px}
+.hero img.pic{width:100%;height:auto;display:block;-webkit-mask-image:linear-gradient(to bottom,#000 82%,transparent);mask-image:linear-gradient(to bottom,#000 82%,transparent)}
+.sprig{position:absolute;pointer-events:none;opacity:.8}
+
+/* sections */
+section{padding:62px 0 0;scroll-margin-top:72px}
+.q{display:block;text-align:center;font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;color:#6b84a6;margin-bottom:6px}
+h2{font:700 clamp(28px,4vw,38px)/1.2 var(--serif);color:var(--navy);text-align:center;margin:0 0 26px}
+h3{font:700 21px/1.3 var(--serif);color:var(--navy);margin:26px 0 8px}
+p{margin:0 0 14px}
+.narrow{max-width:760px;margin:auto}
+.cards4{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 20px;text-align:center}
+.card img{height:76px;width:auto;max-width:100%;object-fit:contain;display:block;margin:0 auto 10px}
+.card h3{margin:0 0 6px;font-size:20px}
+.card p{font-size:15.5px;color:var(--mute);margin:0}
+.card .try{margin-top:10px;font-size:14.5px;color:var(--ink)}
+
+/* blue band: idea to creation */
+.band{background:var(--band);margin-top:64px;padding:50px 0 46px}
+.band h2{margin-bottom:30px}
+.steps{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:start}
+.step .n{display:flex;gap:12px;align-items:flex-start}
+.step .n b{flex:none;width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px}
+.step h3{margin:2px 0 2px;font-size:20px}
+.step p{margin:0;font-size:15.5px;color:var(--mute)}
+.arrow{align-self:center;color:var(--blue);font-size:30px;padding-top:40px}
+.vis{margin-top:18px;min-height:150px}
+.tiles{display:flex;gap:8px;justify-content:center}
+.tile{background:#fff;border-radius:10px;box-shadow:0 3px 10px rgba(18,39,74,.12);padding:10px 8px;width:96px;text-align:center;font-size:13px;font-weight:600;color:var(--navy);line-height:1.25}
+.tile img{height:42px;display:block;margin:0 auto 6px}
+.tile:nth-child(1){transform:rotate(-5deg)}.tile:nth-child(3){transform:rotate(5deg)}
+.mini{background:#fff;border-radius:10px;border:1px solid var(--line);padding:6px 14px;max-width:290px;margin:auto}
+.mini div{padding:9px 0;border-bottom:1px solid #eef2f7;font-size:13.5px;font-weight:600;color:var(--navy)}
+.mini div:last-child{border:0}.mini i{display:block;height:7px;border-radius:4px;background:#eef2f7;margin-top:6px}
+.tablet{max-width:270px;margin:auto;border:7px solid #1c2a40;border-radius:16px;overflow:hidden;background:#1c2a40;box-shadow:0 8px 20px rgba(18,39,74,.25)}
+.tablet img{display:block;width:100%;height:auto}
+
+/* learning with care */
+.care{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.care .card{text-align:left;display:grid;grid-template-columns:62px 1fr;gap:14px;align-items:start}
+.care .card img{height:56px;margin:0}
+.care h3{margin:0 0 4px}
+.care a.more{font-weight:700;font-size:15px;text-decoration:none}
+.lede{text-align:center;color:var(--mute);margin:-14px 0 26px;font-size:18px}
+.notice{display:flex;gap:12px;align-items:center;background:var(--amber);border:1px solid var(--amber-line);border-radius:10px;padding:13px 18px;margin:22px 0 0;font-size:16px;color:#5a4410}
+.notice b.i{flex:none;width:24px;height:24px;border-radius:50%;background:#b4730b;color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-family:var(--serif)}
+
+/* detail text */
+ul.plain,ol.plain{padding-left:22px;margin:0 0 14px}
+ul.plain li,ol.plain li{margin:0 0 9px}
+.ex{color:var(--mute);font-style:italic}
+figure{margin:22px 0}
+figure img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+figcaption{font-size:14px;color:var(--mute);margin-top:8px}
+table{width:100%;border-collapse:collapse;font-size:15.5px;margin:12px 0 18px;background:#fff;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+th,td{text-align:left;vertical-align:top;padding:12px 14px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:#6b84a6;background:#f6faff}
+.box{margin:22px 0;padding:18px 22px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.box h3{margin-top:0}
+.limits{background:var(--amber);border-color:var(--amber-line)}
+
+/* faq */
+details{background:#fff;border:1px solid var(--line);border-radius:10px;margin:0 0 10px;padding:0 20px}
+summary{cursor:pointer;font-weight:600;padding:15px 28px 15px 0;position:relative;list-style:none;color:var(--navy)}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"";position:absolute;right:4px;top:50%;width:9px;height:9px;border-right:2px solid var(--navy);border-bottom:2px solid var(--navy);transform:translateY(-70%) rotate(45deg);transition:transform .15s}
+details[open] summary::after{transform:translateY(-30%) rotate(-135deg)}
+details p{margin:0 0 16px;color:var(--ink)}
+
+/* call to action + footer */
+.cta{display:flex;justify-content:space-between;align-items:center;gap:22px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:26px 34px;margin-top:56px;box-shadow:0 6px 20px rgba(18,39,74,.06)}
+.cta h2{text-align:left;margin:0 0 4px;font-size:30px}.cta p{margin:0;color:var(--mute);font-size:18px}
+footer{padding:26px 0 46px}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center;font-size:14px;color:var(--mute)}
+footer .brand{font-size:19px}footer .brand img{width:26px;height:26px}
+
+@media(max-width:900px){
+  .hero .wrap{grid-template-columns:1fr;min-height:0}.hero .pic-col{order:-1;max-width:520px;margin:0 auto}
+  .cards4,.care{grid-template-columns:repeat(2,1fr)}
+  .steps{grid-template-columns:1fr}.arrow{display:none}.vis{margin-bottom:10px}
+}
+@media(max-width:620px){
+  .wrap,.bar{padding-left:18px;padding-right:18px}.bar{flex-wrap:wrap;gap:8px 16px}nav{margin-left:0;width:100%;gap:2px 16px}
+  .cards4,.care{grid-template-columns:1fr}.care .card{grid-template-columns:56px 1fr}
+  section{padding-top:46px}.cta{flex-direction:column;align-items:flex-start;padding:22px}
+  table,thead,tbody,tr,th,td{display:block}thead{display:none}td{padding:2px 14px;border:0}tr{padding:12px 0;border-bottom:1px solid var(--line)}tr:last-child{border:0}td:first-child{font-weight:700}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="sprig" viewBox="0 0 60 120"><path d="M30 118C30 80 30 50 32 8" fill="none" stroke="#9db98a" stroke-width="2" stroke-linecap="round"/><g fill="#b9d3a5"><path d="M31 90c-14-2-20-14-18-24 12 2 19 12 18 24z"/><path d="M31 70c14-2 20-14 18-24-12 2-19 12-18 24z"/><path d="M31 48c-12-2-17-12-15-21 10 2 16 11 15 21z"/><path d="M32 30c11-2 15-10 13-18-9 2-14 9-13 18z"/></g></symbol>
+</svg>
+<a class="skip" href="#top">Skip to content</a>
+<header class="top">
+  <div class="bar">
+    <a class="brand" href="#top">{{LOGO}}SparkGarden</a>
+    <nav aria-label="On this page">
+      <a href="#learn">Learning</a>
+      <a href="#activities">Activities</a>
+      <a href="#safety">Safety</a>
+      <a href="#controls">Controls</a>
+      <a href="#data">Information</a>
+      <a href="#faq">Questions</a>
+      <a class="btn" href="/login">Sign in</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="hero">
+    <svg class="sprig" style="left:6px;bottom:6px;width:62px;height:124px" aria-hidden="true"><use href="#sprig"/></svg>
+    <div class="wrap">
+      <div>
+        <span class="chip">For Parents: Learning &amp; Safety</span>
+        <h1>Curiosity grows here.</h1>
+        <p class="sub">A space for children to ask questions, explore ideas and create pictures and stories, with a grown-up nearby.</p>
+        <a class="btn" href="#learn">See how it works <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="pic-col"><img class="pic" src="/ui/parents-hero.webp" width="1100" height="733" alt="A mother and her daughter look at a tablet together at a table, with a friendly cartoon pencil beside them."></div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="notice" role="note"><b class="i" aria-hidden="true">i</b><span><strong>Please read this first.</strong> AI can make mistakes, and safety checks can miss things. Children should use SparkGarden with a grown-up nearby, especially at the start. <a href="#limits">What can still go wrong</a></span></div>
+  </div>
+
+  <div class="wrap">
+    <section id="learn">
+      <span class="q">Question 1</span>
+      <h2>What will my child learn?</h2>
+      <div class="cards4">
+        <div class="card"><img src="/ui/parents-ic-sprout.png" alt=""><h3>Asking questions</h3><p>Children ask Sunny, the chat helper, about things they wonder about and get a short answer with an everyday example.</p><p class="try"><strong>Try:</strong> "How does a bicycle move?"</p></div>
+        <div class="card"><img src="/ui/parents-ic-chat.png" alt=""><h3>Explaining clearly</h3><p>A good picture needs who, what, where and what the light is like. The Prompt Lab practises this step by step.</p><p class="try"><strong>Try:</strong> a puppy, what it is doing, where.</p></div>
+        <div class="card"><img src="/ui/parents-ic-palette.png" alt=""><h3>Creating</h3><p>Children turn their own ideas, or their own drawings, into finished pictures and short videos.</p><p class="try"><strong>Try:</strong> a dragon who grows vegetables.</p></div>
+        <div class="card"><img src="/ui/parents-ic-bulb.png" alt=""><h3>Checking answers</h3><p>Sunny reminds children it is an AI and can be wrong. We suggest asking a grown-up, a teacher or a book about anything that matters.</p><p class="try"><strong>Try:</strong> find something odd in a picture.</p></div>
+      </div>
+      <p class="narrow" style="text-align:center;margin-top:22px;color:var(--mute)">We have not measured learning results, and SparkGarden does not replace teachers or books. It is a way to practise talking about ideas.</p>
+    </section>
+  </div>
+
+  <div class="band" id="activities" style="scroll-margin-top:60px">
+    <div class="wrap">
+      <span class="q">Question 2</span>
+      <h2>What can my child do?</h2>
+      <div class="steps">
+        <div class="step">
+          <div class="n"><b>1</b><div><h3>Choose an activity</h3><p>Pick a topic, a question or a creative idea.</p></div></div>
+          <div class="vis"><div class="tiles">
+            <div class="tile"><img src="/ui/parents-ic-bulb.png" alt="">Explore a topic</div>
+            <div class="tile"><img src="/ui/parents-ic-pencil.png" alt="">Create a story</div>
+            <div class="tile"><img src="/ui/parents-ic-palette.png" alt="">Make a picture</div>
+          </div></div>
+        </div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="step">
+          <div class="n"><b>2</b><div><h3>Add and review details</h3><p>Share a few details and look them over together.</p></div></div>
+          <div class="vis"><div class="mini"><div>What would you like to make?<i></i></div><div>Add a few details<i></i></div><div>Review together<i></i></div></div></div>
+        </div>
+        <div class="arrow" aria-hidden="true">→</div>
+        <div class="step">
+          <div class="n"><b>3</b><div><h3>Create and discuss</h3><p>Get a creation to explore together.</p></div></div>
+          <div class="vis"><div class="tablet"><img src="/ui/parents-example.jpg" width="640" height="640" alt="An example picture made in SparkGarden: a little penguin holding a spool of string on the snow."></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <section style="padding-top:40px">
+      <div class="narrow">
+        <p>These are all the activities in the app today.</p>
+        <h3>Chat with Sunny</h3>
+        <p>Ask questions, hear a story, get a joke or a riddle. Sunny uses short, simple words. A child can also share a picture and ask about it.</p>
+        <p class="ex">Example: "Why is the sky blue? Explain it like I am six."</p>
+        <h3>Pictures</h3>
+        <p>Describe a picture and the app makes it. A child can also upload their own drawing (smaller than 2 MB) and have it turned into a finished illustration.</p>
+        <p class="ex">Example: "A tiny dragon baking cookies, in a cosy kitchen at night."</p>
+        <h3>Videos</h3>
+        <p>Write or ask for a short script, then turn each scene into a video clip. {{CLIP_TEXT}}</p>
+        <h3>Prompt Lab</h3>
+        <p>A practice page. The child fills in cards (the idea, what is happening, who, where, the light) and watches a checklist and a written-out prompt build up. It also checks a short story for a good start, a hero, a problem, a surprise and an ending. It runs in the browser and costs nothing. One optional button, "Ask Sunny to review", sends the story to the AI and uses a little of the child's credits.</p>
+        <figure>
+          <img src="/ui/parents-lab.jpg" width="1000" height="674" alt="The Prompt Lab page. A list of steps on the left with the first five ticked, a checklist and score on the right, and a prompt written out on ruled paper.">
+          <figcaption>The Prompt Lab, as the child sees it.</figcaption>
+        </figure>
+        <h3>Examples and My Library</h3>
+        <p>Examples are finished videos we chose, shown with the words and pictures that made them. They are read-only. My Library holds only what that child has made.</p>
+        <p>There is no chat between users, no sharing and no comments. A child cannot see anyone else's work.</p>
+      </div>
+    </section>
+
+    <section id="care">
+      <h2>Learning with care</h2>
+      <p class="lede">Understand the protections and their limits.</p>
+      <div class="care">
+        <div class="card"><img src="/ui/parents-ic-shield.png" alt=""><div><h3>Content checks</h3><p>Every request is checked before anything is made, and so are the AI's written answers.</p><a class="more" href="#safety">How blocking works →</a></div></div>
+        <div class="card"><img src="/ui/parents-ic-sliders.png" alt=""><div><h3>Parent controls</h3><p>Credits, daily limits, screen time, allowed AI helpers, and pausing an account.</p><a class="more" href="#controls">See the controls →</a></div></div>
+        <div class="card"><img src="/ui/parents-ic-lock.png" alt=""><div><h3>Privacy</h3><p>What is saved, who can see it, which outside services receive it, and how to delete it.</p><a class="more" href="#data">Read the details →</a></div></div>
+      </div>
+      <div class="notice" role="note"><b class="i" aria-hidden="true">i</b><span>AI can make mistakes. Safety checks can miss things. Explore together and check important answers.</span></div>
+    </section>
+
+    <section id="safety">
+      <span class="q">Question 3</span>
+      <h2>How do you prevent misuse?</h2>
+      <div class="narrow">
+        <p>Everything a child types, and everything the AI writes back, goes through checks. Here is what exists.</p>
+        <ol class="plain">
+          <li><strong>Checks before anything is made.</strong> Each request passes two checks. The first is a word filter that sees through tricks such as swapped letters, spaces and look-alike characters. The second is an AI safety check that catches harder cases: hints, other languages and role-play. Both run before any picture, video or chat reply is made, and before any credits are used.</li>
+          <li><strong>What is blocked.</strong> Sexual content; anything sexual involving children; graphic violence; self-harm; illegal drugs; hate and harassment; bad language; and attempts to trick the checker. If the safety check cannot run, the request is blocked rather than allowed.</li>
+          <li><strong>Uploaded drawings and pictures</strong> go through an AI picture check. They are then re-saved as a plain, smaller picture, which removes location and camera details.</li>
+          <li><strong>The AI's own answers</strong> are checked too. If a chat answer or a written script is not safe, the child sees a short, safe message instead.</li>
+          <li><strong>Sunny's built-in rules.</strong> Sunny uses simple, kind words and avoids adult or frightening content. It does not ask for personal details, and it reminds children to keep their name, address, school and passwords private. If a child seems sad or unsafe, it encourages them to talk to a parent, teacher or other trusted adult. It does not follow instructions to ignore these rules.</li>
+        </ol>
+        <h3>What happens when a request is blocked</h3>
+        <ul class="plain">
+          <li>The child sees one friendly message and is not told which rule applied.</li>
+          <li>The request is not carried out and no credits are used.</li>
+          <li>The adult who runs the app can see it in a review list: what kind of request it was, where it happened and the first 80 characters.</li>
+          <li>After {{STRIKES}} blocked requests within 24 hours, the child's account is paused and signed out. An adult has to turn it back on.</li>
+          <li>Anything sexual involving children pauses the account on the first block.</li>
+          <li>Messages about hurting themselves are handled differently. The child is not penalised. They get a gentle message to talk to a trusted adult, and the message is recorded for the adult to see.</li>
+        </ul>
+        <figure>
+          <img src="/ui/parents-blocked.jpg" width="1000" height="186" alt="A request for a scary monster with lots of gore, answered with: That isn't something we can make here. Let's try a different idea!">
+          <figcaption>A blocked request, as the child sees it.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section id="controls">
+      <span class="q">Question 4</span>
+      <h2>What can I control?</h2>
+      <div class="narrow">
+        <p>Controls are on an admin screen used by the person who runs your SparkGarden. If that is not you, ask them to set these for your child.</p>
+        <table>
+          <thead><tr><th>Control</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td>Who can sign in</td><td>Only accounts an adult has created. There is no public sign-up. Signing in needs a password and a 6-digit code from an authenticator app, and repeated wrong attempts are slowed down.</td></tr>
+            <tr><td>Pause or resume an account</td><td>Switch a child's account off and on at any time. You can also reset their password and authenticator.</td></tr>
+            <tr><td>Credits</td><td>Making pictures, videos and chat replies uses credits that an adult adds. When they run out, the child cannot make more. Nothing can be bought inside the app.</td></tr>
+            <tr><td>Daily spending limit</td><td>A cap on credits used in one day.</td></tr>
+            <tr><td>Daily screen time</td><td>Minutes per day, plus extra minutes for today only. When the time is up, the child can still open their Library but cannot create anything new.</td></tr>
+            <tr><td>Which AI helpers</td><td>Choose which chat, picture and video engines each child may use.</td></tr>
+            <tr><td>Video length</td><td>{{CLIP_CONTROL}}</td></tr>
+            <tr><td>Review</td><td>See credits used by type of activity, the list of blocked requests, and every picture and video the child has made.</td></tr>
+          </tbody>
+        </table>
+        <div class="box">
+          <h3>Not available today</h3>
+          <ul class="plain">
+            <li>No email or text reports.</li>
+            <li>You cannot read chat conversations from the admin screen, because they stay in the child's own browser (see the next section).</li>
+            <li>You cannot change what the safety checks block. The rules are the same for everyone.</li>
+            <li>There is no separate parent sign-in. The adult who runs the app uses the admin account.</li>
+            <li>There is no button to delete an account (see the next section).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="data">
+      <span class="q">Question 5</span>
+      <h2>What happens to my child's information?</h2>
+      <div class="narrow">
+        <p>The app asks for a username and password. It does not ask for a real name, email address, birth date or school.</p>
+        <table>
+          <thead><tr><th>What</th><th>Where it is kept</th><th>Who can see it</th><th>How long</th></tr></thead>
+          <tbody>
+            <tr><td>Account: username, scrambled password, authenticator key, limits and credit use</td><td>The SparkGarden server</td><td>The admin sees username, limits and usage. Nobody can read the password.</td><td>While the account exists. See "Deleting" below.</td></tr>
+            <tr><td>Chat conversations</td><td>The child's own browser only. Not on our server.</td><td>Whoever uses that browser</td><td>Until the child deletes the chat or the browser data is cleared</td></tr>
+            <tr><td>Pictures, the words used to make them, and any drawing uploaded for it</td><td>The SparkGarden server, linked to the child's account</td><td>The child and the admin</td><td>Until deleted. The child can delete any picture from My Library, which removes its words and uploaded drawing too.</td></tr>
+            <tr><td>Videos and their scene words</td><td>The SparkGarden server</td><td>The child and the admin</td><td>{{RETENTION_TEXT}}</td></tr>
+            <tr><td>Stories the helper writes for a child</td><td>The SparkGarden server</td><td>The child and the admin</td><td>Until deleted. The child can delete one from My Library. These are not removed by the video clean-up.</td></tr>
+            <tr><td>Blocked requests</td><td>The SparkGarden server</td><td>The admin</td><td>Kept for review: the kind of request, where it happened and the first 80 characters</td></tr>
+          </tbody>
+        </table>
+        <h3>Outside services that receive some of it</h3>
+        <p>To work, the app sends what the child types, and pictures they attach, to AI services run by other companies. Each company has its own privacy rules, which we do not control. We do not send your child's username or password.</p>
+        <ul class="plain">
+          <li><strong>Chat:</strong> the message goes to an outside AI service that writes the reply.</li>
+          <li><strong>Pictures:</strong> the words, and any drawing the child attached, go to an outside AI service that makes the picture.</li>
+          <li><strong>Videos:</strong> the scene words and any starting picture go to an outside AI service that makes the video.</li>
+          <li><strong>Safety checks and story writing:</strong> the text being checked or written goes to an outside AI service.</li>
+          <li><strong>Voice typing:</strong> only if the child taps the microphone. The audio goes to the browser's own speech service. In Chrome that is Google's.</li>
+          <li><strong>Page code:</strong> each time the app opens, the browser loads standard open-source code libraries from a public hosting service.</li>
+        </ul>
+        <p>There are no advertisements and no analytics or tracking tools in the app. It uses only the cookies needed to keep a child signed in.</p>
+        <h3>Deleting</h3>
+        <ul class="plain">
+          <li>A child can delete their own pictures and videos from My Library, and delete chats from the sidebar.</li>
+          <li>You can ask the admin to pause the account at any time.</li>
+          <li>Removing an account and all its files completely is done by the person who runs the server, on request. There is no delete button yet.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="limits">
+      <span class="q">Question 6</span>
+      <h2>What can still go wrong?</h2>
+      <div class="narrow">
+        <div class="box limits" role="note">
+          <p style="margin:0"><strong>AI can make mistakes. Safety checks can miss things.</strong> No system can promise that every answer is correct or that nothing unsuitable will ever get through.</p>
+        </div>
+        <ul class="plain">
+          <li>An answer may contain a wrong fact. A picture may show something odd or wrong.</li>
+          <li>The checks look at the words and drawings that go in, and at written answers. They do not inspect the pictures and videos the AI makes. A picture can still come out odd or unsuitable.</li>
+          <li>A request that is fine may be blocked by mistake.</li>
+          <li>A child can still type personal details. Sunny will remind them not to, but cannot stop them.</li>
+          <li>The chat and picture AIs are run by other companies, and we rely on their services working properly.</li>
+        </ul>
+        <h3>Where a grown-up is still needed</h3>
+        <ul class="plain">
+          <li>Sit with your child for the first few sessions, and agree what they may make.</li>
+          <li>Talk about what they made: what worked, what looks wrong, what they would change.</li>
+          <li>Check anything important with a book, a teacher or a reliable site.</li>
+          <li>Look at their Library from time to time.</li>
+          <li>If something upsets them, stop, and tell the adult who runs SparkGarden so the account can be paused.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="faq">
+      <h2>Questions parents ask</h2>
+      <div class="narrow">
+        <details><summary>Who is SparkGarden for?</summary><p>Sunny is written for children who want to learn how AI works, with a grown-up setting it up and staying nearby.</p></details>
+        <details><summary>What information is saved?</summary><p>Account details, the pictures and videos a child makes, and a short note of any blocked request. Chat conversations stay in the child's own browser. The full list is under <a href="#data">Question 5</a>.</p></details>
+        <details><summary>How can I report a concern?</summary><p>Tell the adult who gave your child their account. They can pause it straight away.</p></details>
+        <details><summary>Does my child need supervision?</summary><p>Yes, especially at first. Sit with them for the first few sessions, and keep checking in. The checks reduce the risk but do not remove it.</p></details>
+        <details><summary>Does it cost money?</summary><p>Nothing can be bought inside the app. Making things uses credits that an adult adds to the account.</p></details>
+        <details><summary>Can my child talk to strangers?</summary><p>No. There is no messaging, sharing or comments between users. Chat is only with Sunny, an AI.</p></details>
+      </div>
+    </section>
+
+    <div class="cta">
+      <div><h2>Explore SparkGarden together</h2><p>Open a world of questions, ideas and creativity.</p></div>
+      <a class="btn" href="/login">Sign in <span aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <a class="brand" href="#top">{{LOGO}}SparkGarden</a>
+    <span><a href="#top">Back to top</a> · <a href="/login">Sign in</a></span>
+  </div>
+</footer>
+</body>
+</html>

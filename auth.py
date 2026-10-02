@@ -713,6 +713,8 @@ font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
 .brand{width:100%;max-width:500px;margin:0 auto;display:flex;align-items:center;gap:12px;font-weight:800;font-size:34px;letter-spacing:-.6px;line-height:1}
 .brand img{width:54px;height:54px;border-radius:15px;display:block}
 .w1{color:#1355f2}.w2{color:#f5a300}
+.parents-link{align-self:flex-end;margin:-14px 0 18px;font-size:15px;font-weight:700;color:#1355f2;text-decoration:none;border-bottom:2px solid currentColor;padding-bottom:1px}
+.parents-link:hover{color:#0a0f2c}
 .mid{width:100%;max-width:500px;margin:auto;padding:28px 0}
 h1.hello{font-size:44px;line-height:1.05;font-weight:800;letter-spacing:-1.2px;margin:0 0 10px}
 .sub{font-size:19px;color:#4a5470;margin:0 0 26px;line-height:1.4}
@@ -760,7 +762,7 @@ def _split_page(title: str, body: str) -> str:
     logo = '<img src="%s" alt="">' % _LOGO if _LOGO else ""
     return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,'
             f'initial-scale=1"><title>{_E(title)}</title>{icon}<style>{_SPLIT_CSS}</style></head><body class="split">'
-            f'<main class="left"><div class="brand">{logo}<span><span class="w1">{BRAND[0]}</span>'
+            f'<main class="left"><a class="parents-link" href="/parents">For Parents: Learning &amp; Safety</a><div class="brand">{logo}<span><span class="w1">{BRAND[0]}</span>'
             f'<span class="w2">{BRAND[1]}</span></span></div><div class="mid">{body}</div></main>'
             f'<aside class="hero" role="img" aria-label="A penguin floating with balloons beside a castle picture, a story and a movie">'
             f'<div class="copy"><h2>Big ideas start with you.</h2><p>Make pictures, tell stories and bring them to life.</p></div></aside>'
