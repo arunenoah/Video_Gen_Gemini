@@ -9,3 +9,5 @@ __pycache__/
 .superpowers/
 ConnectID-Certificates/
 ConnectID-Certificates.zip
+users.db
+server.log

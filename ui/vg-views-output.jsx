@@ -1,5 +1,5 @@
 /* ============================================================
-   VideoGen for Kids — Output views: Style + Review + Library
+   SparkGarden — Output views: Style + Review + Library
    ============================================================ */
 
 function vgEstimate(scenes, tier, res) {

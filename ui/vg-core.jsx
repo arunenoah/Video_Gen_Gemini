@@ -1,5 +1,5 @@
 /* ============================================================
-   VideoGen for Kids — Core: themes, data, primitives
+   SparkGarden — Core: themes, data, primitives
    Bright, playful, kid-friendly twist on the SettleiX system.
    ============================================================ */
 
@@ -238,17 +238,10 @@ function vgMoney(n) {
 function VGLogo({ theme, size = 34 }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <div style={{
-        width: size, height: size, borderRadius: size * 0.32,
-        background: theme.logo, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.12)', flexShrink: 0,
-      }}>
-        <svg width={size * 0.56} height={size * 0.56} viewBox="0 0 24 24" fill="none">
-          <path d="M8 5l8 7-8 7V5z" fill="#fff" />
-        </svg>
-      </div>
+      <img src="/ui/logo.png" alt="" width={size} height={size}
+        style={{ width: size, height: size, borderRadius: size * 0.225, flexShrink: 0, display: 'block', boxShadow: '0 4px 12px rgba(0,0,0,0.12)' }} />
       <span style={{ fontFamily: "'Inter',sans-serif", fontWeight: 800, fontSize: size * 0.52, letterSpacing: '-0.4px', color: '#0f1419' }}>
-        VideoGen <span style={{ fontWeight: 600, color: theme.primary }}>Kids</span>
+        Spark<span style={{ fontWeight: 800, color: theme.primary }}>Garden</span>
       </span>
     </div>
   );

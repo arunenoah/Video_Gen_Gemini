@@ -1,5 +1,5 @@
 /* ============================================================
-   VideoGen for Kids — Input views: Script + Scenes
+   SparkGarden — Input views: Script + Scenes
    ============================================================ */
 
 // ---------- SCRIPT VIEW ----------

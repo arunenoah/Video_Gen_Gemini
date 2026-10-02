@@ -1,5 +1,5 @@
 /* ============================================================
-   VideoGen for Kids — Professional line-icon set
+   SparkGarden — Professional line-icon set
    Lucide-style, 24×24, 2px stroke, currentColor. No emoji.
    ============================================================ */
 
@@ -42,6 +42,11 @@ function VGIcon({ name, size = 20, stroke = 2, color = 'currentColor', style = {
 
       // --- meta ---
       case 'clock': return <><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" /></>;
+      case 'menu': return <>{P('M4 6h16')}{P('M4 12h16')}{P('M4 18h16')}</>;
+      case 'arrow-up': return <>{P('M12 19V5')}{P('m5 12 7-7 7 7')}</>;
+      case 'download': return <>{P('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4')}{P('m7 10 5 5 5-5')}{P('M12 15V3')}</>;
+      case 'copy': return <><rect x="9" y="9" width="13" height="13" rx="2" />{P('M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1')}</>;
+      case 'panel': return <><rect x="3" y="3" width="18" height="18" rx="2" />{P('M9 3v18')}</>;
       case 'message': return <>{P('M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z')}</>;
       case 'mic': return <><rect x="9" y="2" width="6" height="11" rx="3" />{P('M5 10v1a7 7 0 0 0 14 0v-1')}{P('M12 18v4')}{P('M8 22h8')}</>;
       case 'music': return <>{P('M9 18V5l12-2v13')}<circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></>;

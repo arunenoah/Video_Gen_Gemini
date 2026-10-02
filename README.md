@@ -1,4 +1,4 @@
-# VideoGen — AI Story & Video Generator (Veo 3.1 · Grok Imagine · Seedance 1.5 + Claude Haiku)
+# SparkGarden — AI Story & Video Generator (Veo 3.1 · Grok Imagine · Seedance 1.5 + Claude Haiku)
 
 A local browser app that turns an **idea into a finished, voiced animated video**:
 
@@ -25,14 +25,12 @@ Every time after: `cd VideoGen && ./.venv/bin/python3 server.py`.
 | `gemini` | Veo 3.1 video generation | aistudio.google.com/apikey | **Paid** (Veo not on free tier) |
 | `anthropic` | ✍️ Story writing + ✨ prompt enhance (Claude Haiku 4.5) | console.anthropic.com | credits needed |
 | `openrouter` | Grok Imagine Video (xAI) + Seedance 1.5/2.0 Pro/Fast/Mini (ByteDance) | openrouter.ai/keys | credits needed (optional) |
-| `password` | 🔒 Require sign-in at `/login` | any value you pick | optional — empty/absent leaves the app open |
-
-Key lookup order per provider: env var → `config.json` → `~/.{gemini,anthropic,openrouter,videogen_password}` (`VIDEOGEN_PASSWORD` env / `~/.videogen_password` file for the password).
+Key lookup order per provider: env var → `config.json` → `~/.{gemini,anthropic,openrouter}`.
 Each engine needs only its own key — Veo works without an OpenRouter key and vice versa.
 `ffmpeg` recommended (`brew install ffmpeg`) — thumbnails + stitching.
 
 Two UIs, same backend:
-- **`/`** — VideoGen for Kids: bright tabbed flow (Script → Scenes → Style → Review → Library), 4 themes
+- **`/`** — SparkGarden (chat, pictures and videos): bright tabbed flow (Script → Scenes → Style → Review → Library), 4 themes
 - **`/classic`** — original dark single-page UI, flat archive list with delete
 
 ---
@@ -118,41 +116,27 @@ Veo preview models carry small daily/minute request quotas. The pipeline:
 
 Single-user local tool, but built as if the local network were hostile.
 
-### Optional sign-in
-- Set `keys.password` in `config.json` (or `VIDEOGEN_PASSWORD` env / `~/.videogen_password` file) to require a password at `/login` before the app or any `/api/*`/`/generations/*` route is reachable. Leave it empty/absent to keep the app open (today's behavior, unchanged).
-- Session: HMAC-SHA256-signed cookie (`hmac.compare_digest` verification, no server-side session store), `HttpOnly` + `SameSite=Strict`, 30-day expiry. Signing key auto-generated once into `config.json` (`session_secret`, git-ignored).
-- Password comparison is `hmac.compare_digest` (constant-time) against the plaintext value in `config.json` — same trust/storage model as the other three API keys already living there (git-ignored, server-side-only file), not separately hashed.
-- Login is rate-limited: 10 failed attempts / 5 min per source IP → 429, generic error only (no "which part is wrong" hints).
-- `SameSite=Strict` plus the existing Host-header check block CSRF via cookie-riding; `_json_body()` additionally now rejects any POST whose `Content-Type` isn't exactly `application/json`, closing the classic `<form enctype="text/plain">`-no-preflight CSRF trick that (pre-existing, independent of the password feature) could otherwise hit these JSON endpoints from any web page while the server is running.
-- Sign out via the header button (posts to `/logout`, clears the cookie).
+### Chat, Pictures and Library (ChatGPT-style shell)
+- **Layout:** left menu = Chat · Pictures · Videos · My Library (+ *Users & credits* for admins). Chat and Pictures keep a *Recent* list in this browser (per user); pictures and videos themselves live on the server, so **My Library** shows them on any device (filters, viewer, save, two-step delete).
+- **Chat** (kid-safe "Sunny"): `deepseek/deepseek-v4-flash` (default) or `minimax/minimax-m3` (can look at attached pictures) through OpenRouter. Replies are scanned before display. **Pictures**: `bytedance-seed/seedream-5-0-flash` (~$0.018/picture, can use an attached drawing) or `inclusionai/ming-image-0.1-design` (free, words only). Both bill against the user's credits and honour the engine allow-list.
+- **Attached pictures** (button, drag-drop or paste; **must be < 2 MB**, PNG/JPEG/WebP): re-encoded to a clean JPEG (EXIF/GPS stripped, max 1536 px), checked by Claude Haiku vision (also reads text in the image) **before** anything else sees it, fail-closed, 30 checks/user/hour. Drawings used as a reference are kept next to their result (same owner only).
+- **Voice typing:** mic button fills the message box (Web Speech API — free; audio is processed by the browser vendor's speech service, the resulting text still goes through the normal safety check). Browsers only allow the microphone on `https://` or `localhost`: run with `VIDEOGEN_TLS_CERT=… VIDEOGEN_TLS_KEY=… VIDEOGEN_COOKIE_SECURE=1` (e.g. a Tailscale `tailscale cert` certificate).
+- **Content safety:** every text input (all modes) and every attached picture is checked before any spend — local normalising word filter (leetspeak/spacing/look-alike letters) + Claude Haiku classifier, fail-closed. Blocks are logged for review in *Users & credits*; 3 strikes in 24 h suspend an account, sexual content involving minors suspends at once, self-harm gets a supportive message and no strike. Generated images/videos are not scanned after creation.
 
-### Keys never reach the browser
-- API keys live **server-side only**: env var → `config.json` → `~/.{gemini,anthropic,openrouter}_api_key`. The browser never sees, stores, or transmits a key — unlike typical localStorage-key tools.
-- `config.json` is git-ignored **and** explicitly blocked from HTTP serving (`GET /config.json` → 404, hardcoded guard).
-- Error messages are **key-redacted** before reaching the UI (`key=…` query params and `AIza…`/`AQ.…`/`sk-ant-…`/`sk-or-…` patterns stripped) — Veo download URIs embed the key, so raw errors would leak it.
-- OpenRouter calls hit a **hardcoded** `https://openrouter.ai` base; the poll URL is rebuilt from a regex-validated job id, and the video is downloaded only from `openrouter.ai` https URLs (SSRF guard on API-returned URLs). JSON responses and downloads are size-capped.
-- Repo hygiene: `.gitignore` covers `config.json`, `generations/`, `.venv/`; pre-push secret scans on commit.
-
-### Network surface
-- Server binds **127.0.0.1 only** — unreachable from the LAN.
-- **Host-header validation**: requests must carry `Host: 127.0.0.1:8767` or `localhost:8767`, else 403. Blocks DNS-rebinding attacks (a malicious website resolving its domain to 127.0.0.1 to ride your browser into the API).
-- All outbound traffic goes only to hardcoded endpoints: `generativelanguage.googleapis.com` (via the official google-genai SDK) and `api.anthropic.com` (stdlib urllib). No URL is ever derived from user input → no SSRF.
-
-### Filesystem
-- Every id parameter validated against `^[A-Za-z0-9_\-]+$` **plus** resolved-path containment (`realpath` must stay inside `generations/`) — path traversal blocked at two layers. Verified against raw `../`, URL-encoded `%2e%2e`, and mixed-encoding probes.
-- Output paths are always server-constructed (timestamp-slug ids); user input never names a file.
-- ffmpeg invoked with **array arguments only** — no shell string interpolation, no command injection; stitch ids re-validated server-side.
-
-### Input handling
-- Uploads: MIME allow-list (PNG/JPEG/WebP), base64-validated, 20 MB per image, request bodies capped at 60 MB. Browser additionally downscales images to ≤2048px JPEG before upload.
-- Tier / resolution / duration / scene counts: strict server-side allow-lists (not trusted from the UI).
-- Prompts capped (8000 chars/scene, 2000 chars/idea), scenes 1–15 (writer) / ≤20 (generation), stitch 2–30 clips.
-
-### Output handling (XSS)
-- Archived prompts/scripts are user-influenced *and* LLM-generated text. The UI renders all of it via React text nodes / `textContent` — never `innerHTML` / `dangerouslySetInnerHTML` → no stored XSS from a hostile prompt.
+### Accounts, 2FA and per-user isolation
+- Sign-in is always on: **username + password + 6-digit authenticator (TOTP) code**. Accounts live in `users.db` (git-ignored, mode 0600); passwords are salted scrypt hashes. The old shared `keys.password` / `session_secret` are no longer read — delete them from `config.json`.
+- **First run:** the server prints a one-time admin setup link (`ADMIN SETUP …`) to the console / `server.log`. Open it, scan the QR code, choose a password and confirm with a code. Lost the device? Start once with `VIDEOGEN_RESET_ADMIN=1` to issue a new admin link.
+- **Admin page** (`/admin`, admins only): add users, disable/enable, and *Reset 2FA + password* (revokes their sessions and issues a new one-time setup link, valid 24 h, shown once). Users enroll themselves, so you never see their passwords.
+- **Isolation:** each generation is owned by its creator (`gen_owner` table). Users list/view/delete/stitch/resume and poll jobs only for their own; others return 404. Admins see everything; pre-existing folders have no owner and are admin-only.
+- Sessions are random server-side ids (7-day expiry, `HttpOnly`, `SameSite=Strict`; set `VIDEOGEN_COOKIE_SECURE=1` once served over HTTPS). A password-only login yields no session. A TOTP code works once; 5 wrong codes force a re-login; per-IP (10/5 min) and per-user (5/15 min) rate limits apply.
+- **Credits:** each non-admin user has a USD balance, an optional daily spend cap and an engine allow-list, all set in `/admin` (*Credits & limits* under each user). A submit reserves the job's estimated cost atomically (HTTP 402 if the balance or daily cap doesn't cover it, 403 for a disallowed engine); when the job ends it is settled once — failed jobs refund in full, finished jobs refund `estimate − actual cost`. Admins are unmetered. Every movement is recorded in the `credit_ledger` table. Credits follow the app's own cost estimates, not the provider's invoice (OpenRouter has billed ~2× its listing rate). `/api/me` returns the signed-in user's balance; the header shows it.
+- Not metered yet: ✨ Enhance, ✍️ Write story and the storyboard vision read call (small Anthropic costs) — only a zero-balance user is stopped from starting a storyboard.
+- Admin forms carry a per-session CSRF token. Static files are default-deny — only `/ui/*`, `/video-generator.html` and owned `/generations/*` are served.
+- Still plain HTTP: put it behind HTTPS/Tailscale before exposing it beyond your machine. Remote access is opt-in: `VIDEOGEN_BIND=0.0.0.0 VIDEOGEN_PUBLIC_HOST=<ip-or-domain>`.
+- Tests: `./.venv/bin/python3 -m unittest discover -s tests -v`.
 
 ### What this is NOT hardened for
-- Multi-user or internet exposure — there is no authentication. Do not port-forward 8767 or bind it to 0.0.0.0 without adding auth.
+- Direct internet exposure over plain HTTP — accounts + 2FA exist, but there is no TLS and no per-user spend quota. Use HTTPS/Tailscale first.
 - The Anthropic/Gemini calls send your prompts and images to those providers — normal API terms apply.
 
 ---
@@ -161,8 +145,9 @@ Single-user local tool, but built as if the local network were hostile.
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/login` | sign-in page (only route reachable without a session when a password is set) |
-| POST | `/login` | `password=` (form-encoded) → sets session cookie, redirects to `/` |
+| GET/POST | `/login`, `/login/2fa` | username+password, then authenticator code → session cookie |
+| GET/POST | `/enroll/<token>` | one-time account setup (QR + password), no session needed |
+| GET/POST | `/admin`, `/admin/users[/<id>/disable\|enable\|reset]` | user management (admin + CSRF token) |
 | POST | `/logout` | clears the session cookie, redirects to `/login` |
 | POST | `/api/write-story` | `{idea, scenes:1-15}` → Haiku writes script, archives it |
 | POST | `/api/enhance` | `{scenes:[{prompt,imageIndex}], images}` → animation prompts |
