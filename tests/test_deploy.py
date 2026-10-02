@@ -27,6 +27,28 @@ class FakeHandler:
     _client_ip = server.Handler._client_ip
 
 
+class StartupWarningTests(unittest.TestCase):
+    def test_should_warn_loudly_when_the_admin_reset_switch_is_left_on(self):
+        out = server.startup_warnings(True, Path("/var/data"), True, is_mount=lambda p: True)
+        self.assertEqual(len(out), 1)
+        self.assertIn("VIDEOGEN_RESET_ADMIN=1", out[0])
+        self.assertIn("REMOVE", out[0])
+
+    def test_should_warn_when_the_data_folder_is_not_a_persistent_mount(self):
+        out = server.startup_warnings(False, Path("/var/data"), True, is_mount=lambda p: False)
+        self.assertEqual(len(out), 1)
+        self.assertIn("/var/data", out[0])
+        self.assertIn("persistent disk", out[0])
+
+    def test_should_stay_quiet_when_everything_is_set_up_properly(self):
+        self.assertEqual(server.startup_warnings(False, Path("/var/data"), True, is_mount=lambda p: True), [])
+        # local development: no explicit data dir → no mount warning even though the project folder is not a mount
+        self.assertEqual(server.startup_warnings(False, ROOT, False, is_mount=lambda p: False), [])
+
+    def test_should_report_both_problems_together(self):
+        self.assertEqual(len(server.startup_warnings(True, Path("/var/data"), True, is_mount=lambda p: False)), 2)
+
+
 class PublicHostParsingTests(unittest.TestCase):
     def test_should_forgive_the_usual_slips_when_pasting_a_host(self):
         for raw in ("sparkgarden.onrender.com", "https://sparkgarden.onrender.com/", "  HTTPS://SparkGarden.onrender.com/login?x=1 ",

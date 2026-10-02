@@ -49,6 +49,18 @@ except ValueError:
     PORT = 8767
 # What people see and pay is the provider's real cost × this (business margin). Credits, estimates, final prices and the
 # header total are all in these "user" dollars; meta.json on disk keeps the real provider cost. 1 = pass-through.
+def startup_warnings(reset_admin: bool, data_dir: Path, data_dir_set: bool, is_mount=os.path.ismount) -> list[str]:
+    """Loud, specific log lines for the two setups that make the admin account 'forget' itself between restarts."""
+    out = []
+    if reset_admin:
+        out.append("WARNING: VIDEOGEN_RESET_ADMIN=1 is set — the admin password and 2FA are wiped on EVERY start. "
+                   "Use it once to recover, then REMOVE the variable and redeploy.")
+    if data_dir_set and not is_mount(str(data_dir)):
+        out.append(f"WARNING: {data_dir} is not a separate disk/volume — on most hosts it is wiped on every deploy or restart, "
+                   "so users, credits and generated files would be lost. Attach a persistent disk mounted at this path.")
+    return out
+
+
 def parse_price_multiplier(raw) -> float:
     """VIDEOGEN_PRICE_MULTIPLIER → a sane factor: default 5, clamped to 1..100, junk/NaN/inf → default."""
     try:
@@ -1802,6 +1814,9 @@ if __name__ == "__main__":
         print(f"BytePlus Ark API key (direct Seedance): MISSING — {exc}")
     sys.stdout.reconfigure(line_buffering=True)    # startup lines (incl. the setup link) reach server.log immediately
     auth.init_db()
+    for warning in startup_warnings(os.environ.get("VIDEOGEN_RESET_ADMIN") == "1", auth.DATA_DIR,
+                                    bool(os.environ.get("VIDEOGEN_DATA_DIR"))):
+        print(warning)
     token = auth.bootstrap_admin(force=os.environ.get("VIDEOGEN_RESET_ADMIN") == "1")
     if token:    # one-time, expires in 24 h — consumed on use. Treat server.log as sensitive until then.
         first = (_public_hosts or ["127.0.0.1"])[0]
