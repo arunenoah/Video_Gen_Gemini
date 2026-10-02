@@ -16,6 +16,7 @@ import auth      # noqa: E402
 import safety    # noqa: E402
 import server    # noqa: E402
 
+server.USER_DURATIONS = ()          # older tests use 8-second Veo clips as ordinary users; tests/test_durations.py turns the limit on
 server.PRICE_MULTIPLIER = 1.0      # older tests assume prices pass straight through; tests/test_pricing.py switches it on
 
 PW = "correct-horse-battery"

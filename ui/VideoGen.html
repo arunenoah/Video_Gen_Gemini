@@ -264,7 +264,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
   const lastScript = useRef(VG_DEFAULT_SCRIPT);
   const [startPic, setStartPic] = useState(null);   // picture waiting to become scene 1's start image (sent from Pictures/Library)
 
-  const [tierId, setTierId] = useState('lite');
+  const [tierId, setTierId] = useState(() => vgDefaultTierId());
   const [resId, setResId] = useState('720p');
   const [aspectId, setAspectId] = useState('16:9');
   const [refImages, setRefImages] = useState([]);   // character reference data-URLs (max 3)
@@ -295,7 +295,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
     if (script !== lastScript.current) {
       lastScript.current = script;
       setScenes(prev => {
-        const next = vgParseScript(script).map((p, i) => prev[i] ? { ...p, image: prev[i].image, duration: prev[i].duration } : p);
+        const next = vgParseScript(script).map((p, i) => prev[i] ? { ...p, image: prev[i].image, duration: vgSnapDuration(prev[i].duration) } : p);
         if (startPic && next.length && !next[0].image) next[0] = { ...next[0], image: startPic };   // the waiting picture lands on scene 1
         return next;
       });
@@ -401,7 +401,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
   const moveScene = (idx, dir) => setScenes(s => { const n = [...s]; const j = idx + dir; if (j < 0 || j >= n.length) return s; [n[idx], n[j]] = [n[j], n[idx]]; return n; });
   const deleteScene = (id) => setScenes(s => s.filter(x => x.id !== id));
   const imageScene = (id, src) => setScenes(s => s.map(x => x.id === id ? { ...x, image: src } : x));
-  const addScene = () => setScenes(s => [...s, { id: 'sc' + Date.now(), n: s.length + 1, title: 'New scene', body: '', dialogue: [], duration: 6, accent: SCENE_ACCENTS[s.length % SCENE_ACCENTS.length], image: null }]);
+  const addScene = () => setScenes(s => [...s, { id: 'sc' + Date.now(), n: s.length + 1, title: 'New scene', body: '', dialogue: [], duration: vgSnapDuration(6), accent: SCENE_ACCENTS[s.length % SCENE_ACCENTS.length], image: null }]);
 
   // Character reference images: guide how characters LOOK without appearing on screen
   async function handleRefImages(files) {
@@ -515,7 +515,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
         aspect: aspectId,
         scenes: scenes.map((s, i) => ({
           prompt: finalPrompt(s, styleId, voiceId, musicId, indexFor[i] !== null),
-          duration: s.duration,
+          duration: vgSnapDuration(s.duration),
           imageIndex: indexFor[i],
         })),
         images,
@@ -529,7 +529,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
         tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
         resolution: resId,
         aspect: aspectId,
-        duration: s.duration,
+        duration: vgSnapDuration(s.duration),
         referenceImages: imagePayload(refImages),
       };
       if (s.image) { body.imageBase64 = s.image; body.imageMime = (s.image.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg'; }
@@ -548,7 +548,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
       tier: (VG_TIERS.find(t => t.id === tierId) || {}).api || 'lite',
       resolution: resId,
       aspect: aspectId,
-      duration: 8,
+      duration: vgSnapDuration(8),
     };
     if (sceneCap) body.scenes = sceneCap;   // optional cost cap; omitted ⇒ all panels (≤20)
     enqueue({ endpoint: '/api/storyboard', body, title: 'Storyboard movie', scenesTotal: sceneCap || 1, accent: SCENE_ACCENTS[0] });

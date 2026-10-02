@@ -87,6 +87,26 @@ const VG_DURATIONS_BY_TIER = {
 const VG_DEFAULT_DURATIONS = [4, 6, 8];
 const VG_DURATIONS_UNION = [...new Set(Object.values(VG_DURATIONS_BY_TIER).flat().concat(VG_DEFAULT_DURATIONS))].sort((a, b) => a - b);
 
+// Ordinary users may only make certain clip lengths (the server sends VG_USER.allowedDurations, e.g. [5, 10]; admins get null).
+function vgAllowedDurations() {
+  const a = window.VG_USER && window.VG_USER.allowedDurations;
+  return Array.isArray(a) && a.length ? a : null;
+}
+/** Nearest allowed length (ties go to the shorter one); unchanged when there is no limit. */
+function vgSnapDuration(d) {
+  const a = vgAllowedDurations();
+  return a ? a.reduce((best, x) => (Math.abs(x - d) < Math.abs(best - d) ? x : best), a[0]) : d;
+}
+/** Engines that can make EVERY allowed length — the only ones a limited user is offered (admins see all). */
+function vgTiersForUser() {
+  const a = vgAllowedDurations();
+  return a ? VG_TIERS.filter(t => a.every(d => (VG_DURATIONS_BY_TIER[t.api] || VG_DEFAULT_DURATIONS).includes(d))) : VG_TIERS;
+}
+function vgDefaultTierId() {
+  const tiers = vgTiersForUser();
+  return tiers.some(t => t.id === 'lite') ? 'lite' : (tiers.find(t => t.id === 'seedance-mini') || tiers[0]).id;
+}
+
 const VG_TIERS = [
   { id: 'lite', icon: 'zap', name: 'Lite', tag: 'Quick & cheap', perSec: 0.05, api: 'lite', engine: 'Veo 3.1', blurb: 'Veo 3.1 Lite — great for drafts and trying ideas.' },
   { id: 'standard', icon: 'star', name: 'Standard', tag: 'Most popular', perSec: 0.10, api: 'fast', engine: 'Veo 3.1', blurb: 'Veo 3.1 Fast — crisp motion and rich color.', popular: true },
@@ -221,7 +241,7 @@ function vgParseScript(text) {
       title: s.title || `Scene ${i + 1}`,
       body: s.body.trim(),
       dialogue: s.dialogue,
-      duration: dur,
+      duration: vgSnapDuration(dur),
       accent: SCENE_ACCENTS[i % SCENE_ACCENTS.length],
       image: null,
     };
@@ -254,6 +274,11 @@ function vgRetentionNote() {
   if (!h) return null;
   const span = h % 24 === 0 ? `${h / 24} day${h === 24 ? '' : 's'}` : `${h} hours`;
   return `Videos are removed ${h === 48 ? '48 hours' : span} after they are made — press Save to keep a copy. Pictures stay.`;
+}
+
+/** A relative price level for an engine ("$" cheapest … "$$$$" dearest) — never an exact per-second rate. */
+function vgPriceLevel(perSec) {
+  return perSec < 0.02 ? '$' : perSec < 0.06 ? '$$' : perSec < 0.15 ? '$$$' : '$$$$';
 }
 
 /** Rough price for something not yet made: "about $3.50". Rounded so it reads as a guide, never an exact figure. */
@@ -383,6 +408,6 @@ function vgReadImage(file) {
 
 Object.assign(window, {
   VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
-  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, vgExampleScript, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
+  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, vgExampleScript, vgPriceLevel, vgAllowedDurations, vgSnapDuration, vgTiersForUser, vgDefaultTierId, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });

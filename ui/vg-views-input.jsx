@@ -90,7 +90,7 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, startPic,
           <div>
             <VGOverline style={{ marginBottom: 10 }}>Which engine builds it?</VGOverline>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
-              {VG_TIERS.map(t => {
+              {vgTiersForUser().map(t => {
                 const on = tierId === t.id;
                 return (
                   <button key={t.id} onClick={() => setTierId && setTierId(t.id)} disabled={generating} style={{
@@ -103,7 +103,7 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, startPic,
                       <span style={{ fontWeight: 700, fontSize: 14, color: '#0f1419' }}>{t.name}</span>
                       {t.popular && <span style={{ fontSize: 10, fontWeight: 700, color: theme.primary, background: theme.tint, padding: '1px 6px', borderRadius: 999, border: '1px solid ' + theme.primary }}>POPULAR</span>}
                     </div>
-                    <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 3 }}>{t.tag} · ${t.perSec.toFixed(3)}/s</div>
+                    <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 3 }}>{t.tag} · {vgPriceLevel(t.perSec)}</div>
                   </button>
                 );
               })}
@@ -437,7 +437,7 @@ function moveBtn(dis) { return { width: 30, height: 30, borderRadius: 9, border:
 function ScenesView({ theme, scenes, layout, onChange, onMove, onDelete, onImage, onAdd, goBack, goNext }) {
   // engine (and its duration range) isn't picked until the Style tab, which comes after
   // this one — offer every engine's range here; server validates the final pick per-engine.
-  const durations = VG_DURATIONS_UNION;
+  const durations = vgAllowedDurations() || VG_DURATIONS_UNION;
   const totalDur = scenes.reduce((a, s) => a + s.duration, 0);
   if (!scenes.length) {
     return (

@@ -125,6 +125,18 @@ class BallparkDisplayTests(unittest.TestCase):
         self.assertEqual(got, ["free", "free", "about $0.10", "about $0.40", "about $1", "about $2", "about $3.50",
                                "about $5", "about $12", "about $48"])
 
+    def test_should_show_engines_as_a_price_level_not_an_exact_rate(self):
+        src = (ROOT / "ui" / "vg-core.jsx").read_text()
+        start = src.index("function vgPriceLevel")
+        fn = src[start:src.index("\n}\n", start) + 3]
+        out = subprocess.run(["node", "-e", fn + "\nconsole.log(JSON.stringify([0.008,0.01345,0.02,0.04035,0.052,0.07,0.10,0.2311,0.40].map(vgPriceLevel)))"],
+                             capture_output=True, text=True, check=True).stdout
+        self.assertEqual(json.loads(out), ["$", "$", "$$", "$$", "$$", "$$$", "$$$", "$$$$", "$$$$"])
+        for view in ("vg-views-input.jsx", "vg-views-output.jsx", "VideoGen.html"):
+            text = (ROOT / "ui" / view).read_text()
+            self.assertNotIn("perSec.toFixed", text, view)               # the provider's real per-second rate is never printed
+            self.assertNotIn("perSec).toFixed", text, view)
+
     def test_should_never_print_cents_precision_beyond_the_rounding_step(self):
         for n in (0.123456, 1.2345, 7.777, 99.99):
             text = self.ballpark([n])[0]

@@ -40,7 +40,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId
         <section>
           <VGOverline style={{ marginBottom: 11 }}>Model & quality</VGOverline>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
-            {VG_TIERS.map(t => {
+            {vgTiersForUser().map(t => {
               const on = tierId === t.id;
               return (
                 <VGCard key={t.id} theme={theme} hover active={on} onClick={() => setTierId(t.id)} style={{ padding: '16px 14px', position: 'relative', textAlign: 'center' }}>
@@ -48,7 +48,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId
                   <div style={{ display: 'flex', justifyContent: 'center', color: on ? theme.primary : '#9ca3af' }}><VGIcon name={t.icon} size={26} /></div>
                   <div style={{ fontWeight: 800, fontSize: 16, color: '#0f1419', marginTop: 6, fontFamily: "'Inter',sans-serif" }}>{t.name}</div>
                   {!t.popular && <div style={{ fontSize: 11.5, color: '#9ca3af', fontWeight: 600 }}>{t.tag}</div>}
-                  <div style={{ fontSize: 13, color: theme.primaryDark, fontWeight: 700, marginTop: 6 }}>${(t.perSec).toFixed(3)}<span style={{ color: '#9ca3af', fontWeight: 600 }}>/sec</span></div>
+                  <div title="A rough price level — the final price is shown after your video is made" style={{ fontSize: 13, color: theme.primaryDark, fontWeight: 700, marginTop: 6 }}>{vgPriceLevel(t.perSec)}<span style={{ color: '#9ca3af', fontWeight: 600 }}> price level</span></div>
                   <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 8, lineHeight: 1.4 }}>{t.blurb}</div>
                 </VGCard>
               );

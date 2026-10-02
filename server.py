@@ -152,6 +152,31 @@ def valid_duration(tier: str, duration: int) -> bool:
     return duration in DURATIONS
 
 
+def parse_user_durations(raw) -> tuple[int, ...]:
+    """VIDEOGEN_USER_DURATIONS → clip lengths (seconds) ordinary users may pick. Unset → (5, 10). 'off'/'none'/'all'/'' → no limit."""
+    default = (5, 10)
+    if raw is None:
+        return default
+    text = str(raw).strip().lower()
+    if text in ("", "off", "none", "all", "0"):
+        return ()
+    found = sorted({int(p) for p in text.replace(";", ",").split(",") if p.strip().isdigit() and 1 <= int(p) <= 60})
+    return tuple(found) or default
+
+
+USER_DURATIONS = parse_user_durations(os.environ.get("VIDEOGEN_USER_DURATIONS"))
+
+
+def allowed_durations(user: dict) -> tuple[int, ...] | None:
+    """The clip lengths this user may choose, or None for no limit (admins are never limited)."""
+    return None if user["role"] == "admin" or not USER_DURATIONS else USER_DURATIONS
+
+
+def snap_duration(value, allowed) -> int:
+    """Nearest allowed length (ties go to the shorter, cheaper one)."""
+    return min(allowed, key=lambda a: (abs(a - value), a))
+
+
 def validate_engine(tier: str, resolution: str, aspect: str = "16:9") -> str | None:
     """Returns an error message, or None when tier+resolution+aspect are valid."""
     spec = ENGINES.get(tier)
@@ -876,9 +901,9 @@ class Handler(SimpleHTTPRequestHandler):
             duration = 0
         if not prompt or len(prompt) > 8000:
             return self._json(400, {"error": "prompt required (max 8000 chars)"})
-        engine_err = validate_engine(tier, resolution, aspect)
-        if engine_err or not valid_duration(tier, duration):
-            return self._json(400, {"error": engine_err or "invalid duration"})
+        engine_err = validate_engine(tier, resolution, aspect) or self._duration_error(tier, duration)
+        if engine_err:
+            return self._json(400, {"error": engine_err})
         if self._engine_denied(tier) or not self._guard(prompt, "generate"):
             return
 
@@ -957,8 +982,9 @@ class Handler(SimpleHTTPRequestHandler):
                 duration = int(s.get("duration", 8))
             except (TypeError, ValueError):
                 duration = 0
-            if not valid_duration(tier, duration):
-                return self._json(400, {"error": f"scene {i + 1}: invalid duration for {tier}"})
+            dur_err = self._duration_error(tier, duration)
+            if dur_err:
+                return self._json(400, {"error": f"scene {i + 1}: {dur_err}"})
             idx = s.get("imageIndex", None)
             if idx is not None:
                 if not isinstance(idx, int) or not (0 <= idx < len(raw_images)):
@@ -1130,7 +1156,13 @@ class Handler(SimpleHTTPRequestHandler):
             duration = int(payload.get("duration", 8))
         except (TypeError, ValueError):
             duration = 8
-        if not valid_duration(tier, duration):
+        limit = allowed_durations(self.user)
+        if limit:                                    # ordinary users: the AI-split scenes all get an allowed length
+            duration = snap_duration(duration, limit)
+            dur_err = self._duration_error(tier, duration)
+            if dur_err:
+                return self._json(400, {"error": dur_err})
+        elif not valid_duration(tier, duration):
             duration = 8
 
         # ── validate the storyboard image (identical posture to _story src images) ──
@@ -1312,6 +1344,13 @@ class Handler(SimpleHTTPRequestHandler):
             return self._json(400, {"error": "story uses an unknown engine"})
         if self._engine_denied(tier):
             return
+        limit = allowed_durations(self.user)
+        if limit:                                    # scenes saved before the limit existed may have other lengths
+            pending = [{**s, "duration": snap_duration(s.get("duration", 8), limit)} for s in pending]
+            for s in pending:
+                dur_err = self._duration_error(tier, s["duration"])
+                if dur_err:
+                    return self._json(400, {"error": dur_err})
         try:
             check_engine_key(tier)
         except RuntimeError as exc:
@@ -1779,7 +1818,8 @@ class Handler(SimpleHTTPRequestHandler):
         """Serve the SPA with the signed-in user injected (username is regex-restricted, so safe in a script)."""
         page = (ROOT / "ui" / "VideoGen.html").read_text(encoding="utf-8")
         who = json.dumps({"username": self.user["username"], "role": self.user["role"], "priceMultiplier": PRICE_MULTIPLIER,
-                          "videoRetentionHours": VIDEO_RETENTION_HOURS})
+                          "videoRetentionHours": VIDEO_RETENTION_HOURS,
+                          "allowedDurations": list(allowed_durations(self.user) or []) or None})
         data = page.replace("<head>", f"<head><script>window.VG_USER={who};</script>", 1).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1927,6 +1967,15 @@ class Handler(SimpleHTTPRequestHandler):
         self._json(502, {"error": "We couldn't write that one. Let's try a different idea!"})
         return False
 
+    def _duration_error(self, tier: str, duration: int) -> str | None:
+        """Why this clip length isn't allowed for the current user on this engine (None = fine)."""
+        limit = allowed_durations(self.user)
+        if limit and duration not in limit:
+            return "Clips can be " + " or ".join(str(d) for d in limit) + " seconds long."
+        if not valid_duration(tier, duration):
+            return (f"This engine can't make {duration}-second clips — pick a Seedance engine." if limit else "invalid duration")
+        return None
+
     def _engine_denied(self, tier: str) -> bool:
         """403 (and True) when this user's engine allow-list excludes the tier."""
         if auth.engine_allowed(self.user, tier):
@@ -1963,7 +2012,8 @@ class Handler(SimpleHTTPRequestHandler):
                          "balance": acc["balance"] / auth.MICRO, "dailyCap": acc["daily_cap"] / auth.MICRO,
                          "spentToday": acc["spent_today"] / auth.MICRO, "engines": acc["engines"],
                          "time": auth.time_status(self.user["id"]), "priceMultiplier": PRICE_MULTIPLIER,
-                         "videoRetentionHours": VIDEO_RETENTION_HOURS})
+                         "videoRetentionHours": VIDEO_RETENTION_HOURS,
+                         "allowedDurations": list(allowed_durations(self.user) or []) or None})
 
     def _new_id(self, prompt: str) -> str:
         """make_id + record the current user as owner (story clips '<id>-cNN' inherit it)."""
@@ -2028,6 +2078,8 @@ if __name__ == "__main__":
         start_retention_thread()
     else:
         print("Video retention: off (set VIDEOGEN_VIDEO_RETENTION_HOURS=48 to delete videos 48 h after they are made).")
+    print(f"Clip lengths for ordinary users: {', '.join(map(str, USER_DURATIONS)) + ' s' if USER_DURATIONS else 'any'} "
+          f"(VIDEOGEN_USER_DURATIONS; admins are never limited)")
     print(f"Public hosts accepted: {', '.join(_public_hosts) or '(none — only localhost)'}")
     print(f"Open → http://127.0.0.1:{PORT}/")
     httpd = ThreadingHTTPServer((BIND_ADDR, PORT), Handler)
