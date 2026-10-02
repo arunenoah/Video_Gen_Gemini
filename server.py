@@ -444,9 +444,7 @@ def _haiku(api_key: str, system: str, content: list) -> str:
 def load_anthropic_key() -> str:
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip() or veo.config_key("anthropic")
     if not key:
-        key_file = Path.home() / ".anthropic_api_key"
-        if key_file.is_file():
-            key = key_file.read_text().strip()
+        key = veo.home_key_file(".anthropic_api_key")
     if not key:
         raise RuntimeError(
             "No Anthropic key. Add it to config.json, set ANTHROPIC_API_KEY, or create "

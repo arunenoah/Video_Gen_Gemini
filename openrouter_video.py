@@ -82,9 +82,7 @@ def load_api_key() -> str:
     """OpenRouter key: env → config.json → ~/.openrouter_api_key. Raises RuntimeError if absent."""
     key = os.environ.get("OPENROUTER_API_KEY", "").strip() or veo.config_key("openrouter")
     if not key:
-        key_file = Path.home() / ".openrouter_api_key"
-        if key_file.is_file():
-            key = key_file.read_text().strip()
+        key = veo.home_key_file(".openrouter_api_key")
     if not key:
         raise RuntimeError(
             "No OpenRouter key. Add it to config.json (keys.openrouter), set OPENROUTER_API_KEY, "

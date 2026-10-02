@@ -5,7 +5,7 @@ FROM python:3.12-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
  && rm -rf /var/lib/apt/lists/* \
- && useradd --system --uid 10001 --no-create-home app
+ && useradd --system --uid 10001 --create-home --home-dir /home/app app
 
 WORKDIR /app
 COPY requirements.txt .

@@ -52,9 +52,7 @@ def load_api_key() -> str:
     """Ark key: env → config.json (keys.ark) → ~/.ark_api_key. Raises RuntimeError if absent."""
     key = os.environ.get("ARK_API_KEY", "").strip() or veo.config_key("ark")
     if not key:
-        key_file = Path.home() / ".ark_api_key"
-        if key_file.is_file():
-            key = key_file.read_text().strip()
+        key = veo.home_key_file(".ark_api_key")
     if not key:
         raise RuntimeError(
             "No BytePlus Ark key. Add it to config.json (keys.ark), set ARK_API_KEY, "

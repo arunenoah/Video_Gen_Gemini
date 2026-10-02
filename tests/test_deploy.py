@@ -1,14 +1,19 @@
 """Deployment readiness: proxy-safe host/IP handling, health check, HEAD hardening, data folder, deploy files."""
+import os
 import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import auth      # noqa: E402
-import server    # noqa: E402
+import ark_video        # noqa: E402
+import auth             # noqa: E402
+import openrouter_video # noqa: E402
+import server           # noqa: E402
+import veo              # noqa: E402
 from harness import LiveServerCase   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -66,6 +71,54 @@ class DeployHttpTests(LiveServerCase):
         self.assertTrue(str(server.GENERATIONS).startswith(str(server.GENERATIONS.parent)))
         for evil in ("/generations/../users.db", "/generations/%2e%2e/%2e%2e/etc/passwd", "/generations/alice-gen/../../users.db"):
             self.assertIn(self.req("alice", "GET", evil).status, (400, 404), evil)
+
+
+class UnreadableHomeTests(unittest.TestCase):
+    """Regression: in the container the app user's HOME was /root (unreadable) → PermissionError crashed startup."""
+
+    LOADERS = (("veo", lambda: veo.load_api_key(), "GEMINI_API_KEY"),
+               ("anthropic", lambda: server.load_anthropic_key(), "ANTHROPIC_API_KEY"),
+               ("openrouter", lambda: openrouter_video.load_api_key(), "OPENROUTER_API_KEY"),
+               ("ark", lambda: ark_video.load_api_key(), "ARK_API_KEY"))
+
+    def _no_keys(self):
+        env = {k: "" for k in ("GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "ARK_API_KEY")}
+        return mock.patch.dict(os.environ, env), mock.patch.object(veo, "config_key", return_value="")
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root ignores file permissions")
+    def test_should_treat_an_unreadable_home_as_no_key_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            locked = Path(tmp) / "locked"
+            locked.mkdir()
+            locked.chmod(0o000)
+            try:
+                env, cfg = self._no_keys()
+                with env, cfg, mock.patch("pathlib.Path.home", return_value=locked):
+                    self.assertEqual(veo.home_key_file(".gemini_api_key"), "")
+                    for name, load, _ in self.LOADERS:
+                        with self.assertRaises(RuntimeError, msg=name):        # "No … key", never PermissionError
+                            load()
+            finally:
+                locked.chmod(0o700)
+
+    def test_should_survive_a_missing_home_and_still_prefer_the_environment(self):
+        env, cfg = self._no_keys()
+        with env, cfg, mock.patch("pathlib.Path.home", side_effect=RuntimeError("no home")):
+            self.assertEqual(veo.home_key_file(".x"), "")
+            with self.assertRaises(RuntimeError):
+                veo.load_api_key()
+        with mock.patch.dict(os.environ, {"GEMINI_API_KEY": "from-env"}), mock.patch("pathlib.Path.home", side_effect=RuntimeError):
+            self.assertEqual(veo.load_api_key(), "from-env")
+
+    def test_should_read_a_key_file_from_a_normal_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / ".gemini_api_key").write_text("  file-key \n")
+            with mock.patch("pathlib.Path.home", return_value=Path(tmp)):
+                self.assertEqual(veo.home_key_file(".gemini_api_key"), "file-key")
+
+    def test_should_give_the_container_user_its_own_home(self):
+        self.assertRegex((ROOT / "Dockerfile").read_text(), r"useradd .*--create-home --home-dir /home/app")
+        self.assertIn("HOME=/home/app", (ROOT / "deploy" / "entrypoint.sh").read_text())
 
 
 class DeployFilesTests(unittest.TestCase):

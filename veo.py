@@ -43,13 +43,21 @@ def config_key(name: str) -> str:
         return ""
 
 
+def home_key_file(name: str) -> str:
+    """Contents of ~/<name>, or "" if it is missing OR unreadable. A container user with no/unreadable home folder
+    must fall through to "no key configured", never crash the server."""
+    try:
+        path = Path.home() / name
+        return path.read_text().strip() if path.is_file() else ""
+    except (OSError, RuntimeError, KeyError):
+        return ""
+
+
 def load_api_key() -> str:
     """Gemini key: env → config.json → ~/.gemini_api_key. Raises RuntimeError if absent."""
     key = os.environ.get("GEMINI_API_KEY", "").strip() or config_key("gemini")
     if not key:
-        key_file = Path.home() / ".gemini_api_key"
-        if key_file.is_file():
-            key = key_file.read_text().strip()
+        key = home_key_file(".gemini_api_key")
     if not key:
         raise RuntimeError(
             "No API key. Add it to config.json, set GEMINI_API_KEY, or create "

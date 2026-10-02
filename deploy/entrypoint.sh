@@ -6,6 +6,7 @@ mkdir -p "$DATA"
 if [ "$(id -u)" = "0" ]; then
   # Disks are usually mounted root-owned. Only re-own when needed so a big existing disk isn't walked on every start.
   [ "$(stat -c %u "$DATA")" = "10001" ] || chown -R 10001:10001 "$DATA"
-  exec setpriv --reuid=10001 --regid=10001 --init-groups python /app/server.py
+  # setpriv keeps the caller's HOME (/root, unreadable to uid 10001) — point it at the app user's own home
+  exec env HOME=/home/app setpriv --reuid=10001 --regid=10001 --init-groups python /app/server.py
 fi
 exec python /app/server.py
