@@ -560,6 +560,79 @@ def _save_b64_images(raw_list: list, out_dir: Path, prefix: str, max_n: int):
     return paths, None
 
 
+# ── curated examples: read-only samples (video + prompt + pictures) shown to every signed-in user ──────────────────────────
+# Bundled in the repo (tools/bundle_example.py), so they are reviewed before shipping and are untouched by video retention.
+EXAMPLES_DIR = ROOT / "examples"
+EXAMPLE_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,60}$")
+EXAMPLE_FILE_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}\.(mp4|jpg|jpeg|png|webp)$")       # json and anything else is never served
+EXAMPLE_ROLES = {"character", "scene", "start", "storyboard"}
+
+
+def _clean_example(folder: Path, raw) -> dict | None:
+    """Validate one example.json and turn it into the public shape (URLs, no internal fields); None = unusable."""
+    if not isinstance(raw, dict):
+        return None
+
+    def text(v, limit):
+        return v.strip()[:limit] if isinstance(v, str) else ""
+
+    def exists(name, exts):
+        return (isinstance(name, str) and EXAMPLE_FILE_RE.match(name) and name.rsplit(".", 1)[1].lower() in exts
+                and (folder / name).is_file() and not (folder / name).is_symlink())
+
+    title = text(raw.get("title"), 120)
+    video = raw.get("video")
+    if not title or not exists(video, {"mp4"}):
+        return None
+    scenes = []
+    for i, s in enumerate((raw.get("scenes") if isinstance(raw.get("scenes"), list) else [])[:30], 1):
+        prompt = text((s or {}).get("prompt") if isinstance(s, dict) else "", 8000)
+        if not prompt:
+            return None
+        dur = s.get("duration")
+        scenes.append({"n": i, "duration": dur if isinstance(dur, int) and 0 <= dur <= 60 else 0, "prompt": prompt})
+    if not scenes:
+        return None
+    summary = text(raw.get("summary"), 400)
+    if any(safety.local_check(t) for t in [title, summary] + [s["prompt"] for s in scenes]):
+        print(f"examples: skipping {folder.name} — the safety word list flagged its text")
+        return None
+    base = f"/examples/{folder.name}/"
+    assets = []
+    for a in (raw.get("assets") if isinstance(raw.get("assets"), list) else [])[:12]:
+        if isinstance(a, dict) and exists(a.get("file"), {"jpg", "jpeg", "png", "webp"}) and a.get("role") in EXAMPLE_ROLES:
+            assets.append({"url": base + a["file"], "role": a["role"], "label": text(a.get("label"), 100)})
+    poster = raw.get("poster")
+    order = raw.get("order")
+    dur = raw.get("duration")
+    return {"id": folder.name, "title": title, "summary": summary, "kind": text(raw.get("kind"), 12),
+            "engine": text(raw.get("engine"), 60), "resolution": text(raw.get("resolution"), 12),
+            "aspect": raw.get("aspect") if raw.get("aspect") in ("16:9", "9:16", "1:1") else "16:9",
+            "duration": dur if isinstance(dur, int) and 0 <= dur <= 600 else sum(s["duration"] for s in scenes),
+            "sceneCount": len(scenes), "scenes": scenes, "assets": assets, "videoUrl": base + video,
+            "posterUrl": base + poster if exists(poster, {"jpg", "jpeg", "png", "webp"}) else None,
+            "order": order if isinstance(order, int) else 100}
+
+
+def load_examples(root: Path | None = None) -> list[dict]:
+    """All valid examples under examples/ (a broken or tampered one is skipped, never served)."""
+    root = root or EXAMPLES_DIR
+    out = []
+    if not root.is_dir():
+        return out
+    for folder in sorted(root.iterdir()):
+        if folder.is_symlink() or not folder.is_dir() or not EXAMPLE_SLUG_RE.match(folder.name):
+            continue
+        try:
+            raw = json.loads((folder / "example.json").read_text())
+        except (OSError, ValueError):
+            continue
+        ex = _clean_example(folder, raw)
+        if ex:
+            out.append(ex)
+    return sorted(out, key=lambda e: (e["order"], e["title"].lower()))
+
+
 # ── retention: video assets expire, pictures and scripts stay ─────────────────────────────────────────────────
 VIDEO_KINDS = {"clip", "story", "stitch"}             # everything that is a video; 'image' and 'script' are never expired
 
@@ -715,6 +788,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._me()
         if path == "/api/models":
             return self._models()
+        if path == "/api/examples":
+            return self._json(200, load_examples())
+        if path.startswith("/examples/"):
+            return self._example_file(path)
         if path == "/api/list":
             return self._list()
         if path.startswith("/api/job/"):
@@ -1520,9 +1597,25 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     # ── helpers ──────────────────────────────────────────────────────────────
+    def _example_file(self, path: str):
+        """/examples/<slug>/<file>: only mp4/jpg/png/webp inside a valid example folder — never example.json or anything else."""
+        parts = path.split("?", 1)[0].split("/")                      # ['', 'examples', slug, file]
+        if len(parts) != 4 or not EXAMPLE_SLUG_RE.match(parts[2]) or not EXAMPLE_FILE_RE.match(parts[3]):
+            return self.send_error(404)
+        target = EXAMPLES_DIR / parts[2] / parts[3]
+        try:
+            ok = target.is_file() and not target.is_symlink() and target.resolve().is_relative_to(EXAMPLES_DIR.resolve())
+        except OSError:
+            ok = False
+        if not ok:
+            return self.send_error(404)
+        return super().do_GET()
+
     def translate_path(self, path):
         """Serve /generations/* from the (possibly relocated) data folder; everything else from the project folder."""
         clean = path.split("?", 1)[0].split("#", 1)[0]
+        if clean.startswith("/examples/"):
+            return str(EXAMPLES_DIR / posixpath.normpath(unquote(clean[len("/examples/"):])))
         if clean.startswith("/generations/"):
             rel = posixpath.normpath(unquote(clean[len("/generations/"):]))
             if rel.startswith(("..", "/")):

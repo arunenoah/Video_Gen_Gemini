@@ -243,6 +243,11 @@ function vgExpiry(iso) {
   return { text: `Expires in ${Math.round(h / 24)} days`, soon: false };
 }
 
+/** The Script-tab text for a curated example: "Clip N — Scene N" headers + each scene's prompt. */
+function vgExampleScript(ex) {
+  return (ex.scenes || []).map(s => `Clip ${s.n} — Scene ${s.n}\n${s.prompt}`).join('\n\n');
+}
+
 /** Banner text explaining how long videos are kept (null when videos are kept forever). */
 function vgRetentionNote() {
   const h = window.VG_USER && window.VG_USER.videoRetentionHours;
@@ -378,6 +383,6 @@ function vgReadImage(file) {
 
 Object.assign(window, {
   VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
-  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
+  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, vgExampleScript, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });

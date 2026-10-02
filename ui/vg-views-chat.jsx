@@ -563,6 +563,104 @@ function LibraryPane({ theme, onUseImage, toast, menuVisible }) {
   );
 }
 
+// ---------- Examples: curated, read-only samples — see the video, the prompt and the pictures behind it ----------
+function ExamplesPane({ theme, onUseScript, menuVisible }) {
+  const [items, setItems] = useS(null);
+  const [open, setOpen] = useS(null);
+  useE(() => {
+    fetch('/api/examples').then(r => { if (!r.ok || r.redirected) throw new Error('x'); return r.json(); }).then(setItems).catch(() => setItems({ error: true }));
+  }, []);
+  useE(() => {
+    const on = (e) => { if (e.key === 'Escape') setOpen(null); };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, []);
+  const list = Array.isArray(items) ? items : [];
+  const tag = (t) => <span key={t} style={{ background: theme.tint, color: theme.primaryDark, borderRadius: 999, padding: '4px 11px', fontSize: 12.5, fontWeight: 700 }}>{t}</span>;
+
+  return (
+    <div style={{ height: '100%', overflowY: 'auto', padding: menuVisible ? '60px 28px 40px' : '28px 32px 40px', boxSizing: 'border-box' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <h1 style={{ fontFamily: "'Inter',sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: '-0.5px', margin: '0 0 6px' }}>Examples</h1>
+        <p style={{ margin: '0 0 22px', color: '#6b7280', fontSize: 15 }}>See how a video is made: the prompt that was written, the pictures that went in, and what came out. Open one and try the prompt yourself.</p>
+        {items === null && <div style={{ color: '#9ca3af' }}>Loading…</div>}
+        {items && items.error && <div style={{ color: '#b45309' }}>Could not load the examples. Reload the page.</div>}
+        {Array.isArray(items) && list.length === 0 && <div style={{ color: '#6b7280', padding: '40px 0' }}>No examples yet — check back soon.</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(270px,1fr))', gap: 18 }}>
+          {list.map(ex => (
+            <button key={ex.id} onClick={() => setOpen(ex)} style={{ textAlign: 'left', border: '1px solid #eceef1', borderRadius: 20, overflow: 'hidden', background: '#fff', cursor: 'pointer', padding: 0, boxShadow: '0 2px 12px rgba(15,20,25,.05)' }}>
+              <div style={{ position: 'relative', aspectRatio: '16 / 10', background: '#f3f4f6' }}>
+                {ex.posterUrl && <img src={ex.posterUrl} alt={ex.title} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />}
+                <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ width: 54, height: 54, borderRadius: 999, background: 'rgba(255,255,255,.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><VGIcon name="play" size={22} color="#0f1419" /></span>
+                </span>
+              </div>
+              <div style={{ padding: '14px 16px 16px' }}>
+                <div style={{ fontWeight: 800, fontSize: 16.5, color: '#0f1419' }}>{ex.title}</div>
+                {ex.summary && <div style={{ fontSize: 13.5, color: '#6b7280', marginTop: 4, lineHeight: 1.45 }}>{ex.summary}</div>}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                  {tag(`${ex.sceneCount} scene${ex.sceneCount === 1 ? '' : 's'}`)}{tag(`${ex.duration}s`)}{ex.assets.length > 0 && tag(`${ex.assets.length} picture${ex.assets.length === 1 ? '' : 's'}`)}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {open && (
+        <div onClick={() => setOpen(null)} role="dialog" aria-modal="true" aria-label={open.title}
+          style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(15,20,25,.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 24, width: 'min(1060px,100%)', maxHeight: '100%', overflow: 'auto', padding: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ flex: 1 }}>
+                <h2 style={{ margin: 0, fontFamily: "'Inter',sans-serif", fontSize: 22, fontWeight: 800, letterSpacing: '-0.4px' }}>{open.title}</h2>
+                {open.summary && <p style={{ margin: '6px 0 0', color: '#6b7280', fontSize: 14.5 }}>{open.summary}</p>}
+              </div>
+              <button onClick={() => setOpen(null)} style={chipBtn}>Close</button>
+            </div>
+            <div style={{ display: 'flex', gap: 22, marginTop: 18, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div style={{ flex: '0 1 380px', minWidth: 240 }}>
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 8 }}>3 · The result</div>
+                <video key={open.id} src={open.videoUrl} poster={open.posterUrl || undefined} controls playsInline style={{ width: '100%', maxHeight: '62vh', borderRadius: 16, background: '#000', display: 'block' }} />
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                  {[open.engine, open.resolution, open.aspect, `${open.duration}s`].filter(Boolean).map(tag)}
+                </div>
+              </div>
+              <div style={{ flex: '1 1 340px', minWidth: 260 }}>
+                {open.assets.length > 0 && (
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 8 }}>1 · The pictures that went in</div>
+                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                      {open.assets.map(a => (
+                        <a key={a.url} href={a.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: '#4b5563', width: 150 }}>
+                          <img src={a.url} alt={a.label} loading="lazy" style={{ width: 150, height: 150, objectFit: 'cover', borderRadius: 14, border: '1px solid #e5e7eb', display: 'block', background: '#f3f4f6' }} />
+                          <div style={{ fontSize: 12, marginTop: 4, lineHeight: 1.3 }}>{a.label}</div>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div style={{ fontSize: 12, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: '#9ca3af', marginBottom: 8 }}>2 · The prompt</div>
+                <div style={{ display: 'grid', gap: 10 }}>
+                  {open.scenes.map(s => (
+                    <div key={s.n} style={{ background: '#f8fafc', border: '1px solid #e8edf3', borderRadius: 14, padding: '10px 14px' }}>
+                      <div style={{ fontWeight: 800, fontSize: 13, color: theme.primaryDark, marginBottom: 4 }}>Scene {s.n}{s.duration ? ` · ${s.duration}s` : ''}</div>
+                      <div style={{ whiteSpace: 'pre-wrap', fontSize: 13.5, lineHeight: 1.5, color: '#374151', maxHeight: 190, overflowY: 'auto' }}>{s.prompt}</div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => { const ex = open; setOpen(null); onUseScript(vgExampleScript(ex)); }} style={{ marginTop: 16, padding: '12px 22px', border: 'none', borderRadius: 999, background: theme.primary, color: '#fff', fontWeight: 800, fontSize: 15, cursor: 'pointer', boxShadow: theme.glow }}>
+                  Try this prompt in Videos →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- daily time allowance ----------
 function TimeLeft({ clock }) {
   if (!clock || !clock.limitMin) return null;
@@ -618,6 +716,7 @@ function Sidebar({ theme, mode, setMode, convs, activeId, onNew, onSelect, onDel
         {modeBtn('image', 'image', 'Pictures')}
         {modeBtn('video', 'film', 'Videos')}
         {modeBtn('library', 'grid', 'My Library')}
+        {modeBtn('examples', 'star', 'Examples')}
         {user.role === 'admin' && (
           <>
             <div style={{ height: 1, background: '#e8eaed', margin: '8px 6px' }} />
@@ -658,7 +757,7 @@ function AppShell({ theme, renderVideo }) {
   const [mode, setModeState] = useS(() => {
     try {
       const m = localStorage.getItem('vg_mode');
-      return ['chat', 'image', 'video', 'library'].includes(m) || (m === 'users' && user.role === 'admin') ? m : 'chat';   // 'users' is admin-only
+      return ['chat', 'image', 'video', 'library', 'examples'].includes(m) || (m === 'users' && user.role === 'admin') ? m : 'chat';   // 'users' is admin-only
     } catch (e) { return 'chat'; }
   });
   const [videoSeen, setVideoSeen] = useS(false);
@@ -763,6 +862,7 @@ function AppShell({ theme, renderVideo }) {
           </div>
         )}
         {locked && (mode === 'chat' || mode === 'image' || mode === 'video') && <LockedPane theme={theme} menuVisible={!open || narrow} onLibrary={() => setMode('library')} />}
+        {mode === 'examples' && <ExamplesPane key={viewKey} theme={theme} onUseScript={useScript} menuVisible={!open || narrow} />}
         {mode === 'library' && <LibraryPane key={viewKey} theme={theme} onUseImage={useImage} toast={toast} menuVisible={!open || narrow} />}
         {isConv && !locked && <ConversationView key={mode + viewKey} theme={theme} kind={mode} user={user}
               models={models ? (models.error ? { error: true } : models[mode]) : null} conv={conv} convId={convId} upsert={upsertActive}

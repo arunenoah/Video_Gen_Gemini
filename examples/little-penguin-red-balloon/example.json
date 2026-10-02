@@ -1,0 +1,26 @@
+{
+  "id": "little-penguin-red-balloon",
+  "title": "Little Penguin and the red balloon",
+  "summary": "A short story drawn as picture cards, then turned into an animated video.",
+  "kind": "story",
+  "engine": "Seedance 2.0 Mini",
+  "resolution": "720p",
+  "aspect": "1:1",
+  "duration": 5,
+  "scenes": [
+    {
+      "n": 1,
+      "duration": 5,
+      "prompt": "3D Pixar-style cartoon animation, bright friendly colors, expressive characters. Maintain the exact art style, characters, lighting and layout of the starting frame.\n\nHere's a simple, warm story for you:\nLittle Penguin was walking happily 🐧✨ when she saw a red balloon 🎈. \"I'll hold it!\" she thought. She grabbed the string, but—**POP!**—the balloon burst. 😢\n\nPenguin felt sad. Then she had a new idea: \"I'll make a kite!\" She found a leaf, some twigs, and a long thread. She tied them together. 🪁\n\nBut the wind blew hard. The thread snapped! The kite flew up, up, up into the blue sky. ☁️\n\nPenguin watched it go. She wasn't sad anymore. \"That kite is flying to the moon!\" she giggled. 🌙\n**Fun question:** If you could send a kite to the moon, what colour would it be? 🎨\n\nNarration voice: a warm, sunny female narrator.\n\nPlayful, upbeat background music.\n\nNo text overlays, no logos, no watermarks."
+    }
+  ],
+  "assets": [
+    {
+      "file": "asset01.jpg",
+      "role": "character",
+      "label": "Character look + Scene picture"
+    }
+  ],
+  "video": "clip.mp4",
+  "poster": "poster.jpg"
+}
