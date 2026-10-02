@@ -33,7 +33,8 @@ try:                                     # QR rendering is optional — the setu
 except Exception:
     segno = None
 
-DB_PATH = Path(__file__).resolve().parent / "users.db"
+DATA_DIR = Path(os.environ.get("VIDEOGEN_DATA_DIR") or Path(__file__).resolve().parent)   # users.db + generations/ live here
+DB_PATH = DATA_DIR / "users.db"
 MICRO = 1_000_000                            # credits are stored as integer micro-USD
 MAX_CREDIT_USD = 10_000
 ENGINE_IDS: list[str] = []                   # filled by server.py from its ENGINES registry
@@ -69,6 +70,7 @@ def _tx():
 
 
 def init_db() -> None:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     new = not DB_PATH.exists()
     with _tx() as c:
         c.executescript("""

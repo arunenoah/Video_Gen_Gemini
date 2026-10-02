@@ -1,0 +1,4 @@
+# Runtime dependencies (everything else is the Python standard library).
+google-genai==2.8.0   # Veo video generation
+Pillow==12.2.0        # picture re-encoding / thumbnails / safety pre-processing
+segno==1.6.6          # QR codes for 2FA enrolment

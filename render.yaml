@@ -1,0 +1,35 @@
+# Render Blueprint for a STAGING deployment of SparkGarden. Review against Render's current Blueprint spec before use.
+# Secrets are declared with `sync: false` — Render asks for them in its dashboard; never put key values in this file.
+services:
+  - type: web
+    name: sparkgarden-staging
+    runtime: docker
+    plan: starter            # a paid plan is required for a persistent disk
+    region: oregon           # CHOOSE WITH COMPLIANCE (kids' data is stored in this region)
+    branch: deploy/render-staging
+    autoDeploy: false        # deploy by hand: a redeploy stops the service briefly and kills running video jobs
+    healthCheckPath: /healthz
+    numInstances: 1          # SQLite + in-memory jobs: exactly one instance (a disk also forces this)
+    disk:
+      name: sparkgarden-data
+      mountPath: /var/data   # users.db + generations/ — everything outside this path is wiped on every deploy
+      sizeGB: 10
+    envVars:
+      - key: VIDEOGEN_DATA_DIR
+        value: /var/data
+      - key: VIDEOGEN_BIND
+        value: 0.0.0.0
+      - key: VIDEOGEN_COOKIE_SECURE      # served over HTTPS by Render
+        value: "1"
+      - key: VIDEOGEN_TRUST_PROXY        # the app is reachable only through Render's proxy
+        value: "1"
+      - key: VIDEOGEN_PUBLIC_HOST        # e.g. sparkgarden-staging.onrender.com (comma-separate extra domains)
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ARK_API_KEY
+        sync: false

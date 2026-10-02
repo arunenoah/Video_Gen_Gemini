@@ -139,6 +139,19 @@ Single-user local tool, but built as if the local network were hostile.
 - Direct internet exposure over plain HTTP — accounts + 2FA exist, but there is no TLS and no per-user spend quota. Use HTTPS/Tailscale first.
 - The Anthropic/Gemini calls send your prompts and images to those providers — normal API terms apply.
 
+## Deploying to Render (staging)
+
+> **Approvals first.** This puts kids' accounts, drawings and chats on a public server: get your tech lead's sign-off and tell compliance (hosting region, retention, backups) *before* creating anything. Use a **staging** service first; production changes need human approval outside the codebase.
+
+What was prepared in the repo: `Dockerfile` (Python 3.12 + ffmpeg, runs as non-root), `deploy/entrypoint.sh` (fixes disk ownership), `requirements.txt` (pinned), `.dockerignore` (keeps `config.json`, `users.db`, `generations/` out of images), `render.yaml` (Blueprint, staging) and in the app: `PORT`, `VIDEOGEN_DATA_DIR`, bare-domain host names, `VIDEOGEN_TRUST_PROXY` / `VIDEOGEN_PROXY_HOPS`, `GET /healthz`.
+
+1. In Render choose **New → Web Service**, connect **only this repository**, pick the **`deploy/render-staging`** branch (not `main`), language **Docker**, a **paid** plan, **1 instance**, health check path `/healthz`, auto-deploy **off**. (Or create it from `render.yaml`.)
+2. Add a **persistent disk** mounted at `/var/data` (≥ 10 GB). Only that path survives deploys; it holds `users.db` and `generations/`.
+3. Environment variables (secrets go in Render, never in git): `VIDEOGEN_DATA_DIR=/var/data`, `VIDEOGEN_BIND=0.0.0.0`, `VIDEOGEN_COOKIE_SECURE=1`, `VIDEOGEN_TRUST_PROXY=1`, `VIDEOGEN_PUBLIC_HOST=<your-service>.onrender.com`, plus `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `ARK_API_KEY`.
+4. First deploy: open the service **Logs** and find the `ADMIN SETUP (one-time link, 24 h)` line — it is a credential, so use it once and treat the log as sensitive. Then create users in *Users & credits*.
+5. Operations: a redeploy stops the service for a few seconds and **kills running video jobs** (deploy when idle). Render takes daily disk snapshots (≥ 7 days) but add your own backup of `/var/data`; a restore loses everything newer than the snapshot. Keep exactly one instance (SQLite + in-memory jobs).
+6. Not verified here: the Docker image build itself (no Docker on the dev machine), Render's request timeout / upload-size limits (the app accepts uploads up to ~60 MB and requests that run for minutes) and the exact Blueprint keys — check them on the first staging deploy.
+
 ---
 
 ## API reference

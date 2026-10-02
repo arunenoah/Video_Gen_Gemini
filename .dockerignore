@@ -1,0 +1,18 @@
+# Never bake secrets, user data or local artefacts into an image.
+.git
+.venv
+__pycache__
+*.pyc
+config.json
+users.db
+server.log
+generations
+ConnectID-Certificates
+ConnectID-Certificates.zip
+mobile_app
+docs
+tests
+.agents
+skills-lock.json
+.claude
+.superpowers

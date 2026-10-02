@@ -15,6 +15,7 @@ Security posture:
 import json
 import base64
 import os
+import ipaddress
 import posixpath
 import re
 import shutil
@@ -42,9 +43,12 @@ try:                                     # Pillow: crop one clean character refe
 except Exception:                        # optional dep — feature degrades to text-only consistency
     _PILImage = None
 
-PORT = 8767
+try:
+    PORT = int(os.environ.get("PORT") or 8767)         # hosting platforms (Render…) tell us which port to use
+except ValueError:
+    PORT = 8767
 ROOT = Path(__file__).resolve().parent
-GENERATIONS = ROOT / "generations"
+GENERATIONS = auth.DATA_DIR / "generations"            # same persistent folder as users.db (VIDEOGEN_DATA_DIR)
 ID_RE = re.compile(r"^[A-Za-z0-9_\-]+$")
 SLUG_RE = re.compile(r"[^a-z0-9]+")
 MAX_BODY = 60 * 1024 * 1024          # 60 MB (story mode: several base64 images)
@@ -53,11 +57,27 @@ MAX_CLIPS_PER_STITCH = 30
 MAX_SCENES = 20
 MAX_STORY_IMAGES = 10
 MAX_REF_IMAGES = 3                   # character reference images per run (engine caps)
-ALLOWED_HOSTS = {f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
+def build_allowed_hosts(port: int, public_hosts: list[str]) -> set[str]:
+    """Host headers we accept (DNS-rebinding guard). A public host is accepted with and without the port, because behind
+    an HTTPS reverse proxy browsers send just the bare domain."""
+    hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    for h in public_hosts:
+        hosts.update({h, f"{h}:{port}"})
+    return hosts
+
+
+ALLOWED_HOSTS = build_allowed_hosts(PORT, [])
 # Opt-in remote access: VIDEOGEN_BIND=0.0.0.0 VIDEOGEN_PUBLIC_HOST=<ip-or-domain>[,<another>]
 BIND_ADDR = os.environ.get("VIDEOGEN_BIND", "127.0.0.1")
 _public_hosts = [h.strip().lower() for h in os.environ.get("VIDEOGEN_PUBLIC_HOST", "").split(",") if h.strip()]
-ALLOWED_HOSTS.update(f"{h}:{PORT}" for h in _public_hosts)       # comma-separated: LAN ip, public ip, domain…
+ALLOWED_HOSTS = build_allowed_hosts(PORT, _public_hosts)         # comma-separated: LAN ip, public ip, domain…
+# Behind a reverse proxy (Render, Nginx…) every connection comes from the proxy, so rate limits must use the address the
+# proxy saw. Only enable this when the app is reachable ONLY through that proxy — the header is client-forgeable otherwise.
+TRUST_PROXY = os.environ.get("VIDEOGEN_TRUST_PROXY") == "1"
+try:
+    PROXY_HOPS = max(1, int(os.environ.get("VIDEOGEN_PROXY_HOPS") or 1))     # trusted proxies in front of us
+except ValueError:
+    PROXY_HOPS = 1
 
 JOBS: dict[str, dict] = {}            # in-memory job state
 JOBS_LOCK = threading.Lock()
@@ -511,7 +531,21 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     # ── routing ──────────────────────────────────────────────────────────────
+    def do_HEAD(self):
+        # SimpleHTTPRequestHandler would answer HEAD for ANY file under the project folder before any login or host check
+        # (leaking which files exist and how big they are). We never need HEAD.
+        self.send_error(405, "method not allowed")
+
     def do_GET(self):
+        if self.path.split("?", 1)[0] == "/healthz":      # platform health check: no data, no auth, no host check
+            body = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if not self._host_ok():
             return
         path = self.path.split("?", 1)[0]
@@ -1329,6 +1363,30 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     # ── helpers ──────────────────────────────────────────────────────────────
+    def translate_path(self, path):
+        """Serve /generations/* from the (possibly relocated) data folder; everything else from the project folder."""
+        clean = path.split("?", 1)[0].split("#", 1)[0]
+        if clean.startswith("/generations/"):
+            rel = posixpath.normpath(unquote(clean[len("/generations/"):]))
+            if rel.startswith(("..", "/")):
+                return str(GENERATIONS / "__invalid__")
+            return str(GENERATIONS / rel)
+        return super().translate_path(path)
+
+    def _client_ip(self) -> str:
+        """The caller's address for rate limiting: the TCP peer, or — behind a trusted proxy — the address that proxy saw
+        (the PROXY_HOPS-th entry from the right of X-Forwarded-For; entries further left are client-supplied)."""
+        peer = self.client_address[0]
+        if not TRUST_PROXY:
+            return peer
+        parts = [p.strip() for p in (self.headers.get("X-Forwarded-For") or "").split(",") if p.strip()]
+        if len(parts) < PROXY_HOPS:
+            return peer
+        try:
+            return str(ipaddress.ip_address(parts[-PROXY_HOPS]))
+        except ValueError:
+            return peer
+
     def _host_ok(self) -> bool:
         host = (self.headers.get("Host") or "").lower()
         if host in ALLOWED_HOSTS:
@@ -1429,7 +1487,7 @@ class Handler(SimpleHTTPRequestHandler):
         form = self._form()
         if form is None:
             return self._html(400, auth.login_page("Invalid request."))
-        pid, err = auth.login_step1(form.get("username", ""), form.get("password", ""), self.client_address[0])
+        pid, err = auth.login_step1(form.get("username", ""), form.get("password", ""), self._client_ip())
         if err == "limited":
             return self._html(429, auth.login_page("Too many attempts — try again in a few minutes."))
         if err:
@@ -1440,7 +1498,7 @@ class Handler(SimpleHTTPRequestHandler):
         form = self._form()
         if form is None:
             return self._html(400, auth.totp_page("Invalid request."))
-        sid, err = auth.login_step2(self._get_cookie(PENDING_COOKIE), form.get("code", ""), self.client_address[0])
+        sid, err = auth.login_step2(self._get_cookie(PENDING_COOKIE), form.get("code", ""), self._client_ip())
         if err == "expired":
             return self._redirect("/login", (self._cookie(PENDING_COOKIE, "", 0),))
         if err == "limited":
@@ -1458,7 +1516,7 @@ class Handler(SimpleHTTPRequestHandler):
         if form is None:
             return self._html(400, auth.enroll_page(token, user, "Invalid request."))
         err = auth.complete_enrollment(token, form.get("password", ""), form.get("code", ""),
-                                       self.client_address[0])
+                                       self._client_ip())
         if err:
             return self._html(400, auth.enroll_page(token, user, err))
         self._html(200, auth.done_page())
@@ -1694,9 +1752,12 @@ if __name__ == "__main__":
     auth.init_db()
     token = auth.bootstrap_admin(force=os.environ.get("VIDEOGEN_RESET_ADMIN") == "1")
     if token:    # one-time, expires in 24 h — consumed on use. Treat server.log as sensitive until then.
-        host = f'{(_public_hosts or ["127.0.0.1"])[0]}:{PORT}'
-        scheme = "https" if os.environ.get("VIDEOGEN_TLS_CERT") else "http"
-        print(f"ADMIN SETUP (one-time link, 24 h): {scheme}://{host}/enroll/{token}")
+        first = (_public_hosts or ["127.0.0.1"])[0]
+        if COOKIE_SECURE:                                  # served over HTTPS (own TLS or a proxy): bare domain, no port
+            base = f"https://{first}"
+        else:
+            base = f"{'https' if os.environ.get('VIDEOGEN_TLS_CERT') else 'http'}://{first}:{PORT}"
+        print(f"ADMIN SETUP (one-time link, 24 h): {base}/enroll/{token}")
     print("Sign-in: username + password + authenticator code (accounts in users.db)")
     print(f"Open → http://127.0.0.1:{PORT}/")
     httpd = ThreadingHTTPServer((BIND_ADDR, PORT), Handler)
