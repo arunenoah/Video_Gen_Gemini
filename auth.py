@@ -88,6 +88,10 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS credit_ledger(
           id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, delta INTEGER NOT NULL,
           balance_after INTEGER NOT NULL, reason TEXT NOT NULL, actor INTEGER, created INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS usage_events(
+          id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, kind TEXT NOT NULL, engine TEXT NOT NULL,
+          provider_micro INTEGER NOT NULL, charged_micro INTEGER NOT NULL, created INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS usage_by_user_time ON usage_events(user_id, created);
         CREATE TABLE IF NOT EXISTS safety_events(
           id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, category TEXT NOT NULL,
           source TEXT NOT NULL, excerpt TEXT NOT NULL, strike INTEGER NOT NULL, reviewed INTEGER NOT NULL DEFAULT 0,
@@ -574,6 +578,44 @@ def set_limits(uid: int, daily_cap_micro: int, engines: list[str], daily_minutes
         return ok
 
 
+# ── usage & profit (admin view) ────────────────────────────────────────────────────────────────────────────
+USAGE_LABELS = {"video": "Videos", "chat": "Chat", "image": "Pictures"}
+
+
+def record_usage(uid: int, kind: str, engine: str, provider_usd: float, charged_micro: int) -> None:
+    """One finished, billable action: what it really cost us (provider) and what the user was charged (credits)."""
+    with _tx() as c:
+        c.execute("INSERT INTO usage_events(user_id, kind, engine, provider_micro, charged_micro, created) VALUES(?,?,?,?,?,?)",
+                  (uid, kind, engine, to_micro(provider_usd), int(charged_micro), int(time.time())))
+
+
+def _period_starts(now: float | None = None) -> dict[str, int]:
+    midnight = int(time.mktime(date.fromtimestamp(now if now is not None else time.time()).timetuple()))
+    return {"today": midnight, "d7": midnight - 6 * 86400, "d30": midnight - 29 * 86400, "all": 0}
+
+
+def usage_report(now: float | None = None) -> dict:
+    """{'users': {uid: {period: {n, charged, provider}}}, 'total': {period: ...}, 'by_kind': {uid: {kind: {...}}}} in micro-USD.
+    Periods: today (since local midnight), d7 / d30 (rolling days incl. today), all."""
+    starts = _period_starts(now)
+    users: dict = {}
+    total = {p: {"n": 0, "charged": 0, "provider": 0} for p in starts}
+    by_kind: dict = {}
+    with _tx() as c:
+        for r in c.execute("SELECT user_id, created, charged_micro, provider_micro FROM usage_events"):
+            u = users.setdefault(r["user_id"], {p: {"n": 0, "charged": 0, "provider": 0} for p in starts})
+            for p, start in starts.items():
+                if r["created"] >= start:
+                    for bucket in (u[p], total[p]):
+                        bucket["n"] += 1
+                        bucket["charged"] += r["charged_micro"]
+                        bucket["provider"] += r["provider_micro"]
+        for r in c.execute("SELECT user_id, kind, COUNT(*) n, SUM(charged_micro) ch, SUM(provider_micro) pr FROM usage_events "
+                           "WHERE created>=? GROUP BY user_id, kind", (starts["d30"],)):
+            by_kind.setdefault(r["user_id"], {})[r["kind"]] = {"n": r["n"], "charged": r["ch"], "provider": r["pr"]}
+    return {"users": users, "total": total, "by_kind": by_kind}
+
+
 # ── generation ownership ───────────────────────────────────────────────────────────────────
 def claim(gen_id: str, uid: int) -> None:
     with _tx() as c:
@@ -629,7 +671,9 @@ color:#fff;font-weight:700;cursor:pointer}form.stack button{width:100%}.err{colo
 .ok{color:#166534;font-size:13px;margin:0 0 12px;word-break:break-all}table{width:100%;border-collapse:collapse;font-size:14px}
 td,th{padding:8px 6px;border-bottom:1px solid #eef0f3;text-align:left}td form{display:inline}
 td button{padding:5px 9px;font-size:12px;margin-right:4px}code{background:#f1f5f9;padding:2px 5px;border-radius:4px;
-word-break:break-all}.copyrow{display:flex;gap:8px}.copyrow input{margin-bottom:12px;flex:1}.copyrow button{height:40px;white-space:nowrap}.panel{padding:6px 0 12px;max-width:640px}.f{display:block;font-size:13px;font-weight:700;color:#374151;margin:12px 0 5px}.hint{font-size:12.5px;color:#94a3b8;margin:6px 0 6px}.warn{color:#b45309;font-weight:700;font-size:13px}form.stack2{margin:0 0 6px}.row{display:flex;gap:8px}.row input{margin-bottom:0;flex:1}.chk{display:inline-block;margin:0 12px 6px 0;font-size:13px}.chk input{width:auto;margin:0 4px 0 0}details{padding:6px 0}summary{cursor:pointer;font-size:13px;color:#177bb5;font-weight:600}form.inline{display:flex;gap:8px;margin:10px 0}form.inline input{margin-bottom:0;flex:1}.engines{margin:4px 0 10px}.logo{display:block;margin:0 auto 14px;border-radius:12px}.muted{color:#64748b;font-size:13px}.qr svg{width:180px;height:180px}"""
+word-break:break-all}.copyrow{display:flex;gap:8px}.copyrow input{margin-bottom:12px;flex:1}.copyrow button{height:40px;white-space:nowrap}.panel{padding:6px 0 12px;max-width:640px}.f{display:block;font-size:13px;font-weight:700;color:#374151;margin:12px 0 5px}.hint{font-size:12.5px;color:#94a3b8;margin:6px 0 6px}.warn{color:#b45309;font-weight:700;font-size:13px}form.stack2{margin:0 0 6px}.row{display:flex;gap:8px}.row input{margin-bottom:0;flex:1}.chk{display:inline-block;margin:0 12px 6px 0;font-size:13px}.chk input{width:auto;margin:0 4px 0 0}details{padding:6px 0}summary{cursor:pointer;font-size:13px;color:#177bb5;font-weight:600}form.inline{display:flex;gap:8px;margin:10px 0}form.inline input{margin-bottom:0;flex:1}.engines{margin:4px 0 10px}.logo{display:block;margin:0 auto 14px;border-radius:12px}table.usage{margin:6px 0 4px;font-size:13px}table.usage th{white-space:nowrap}table.usage td{vertical-align:top}
+tr.tot td{background:#f8fafc;border-top:2px solid #e2e8f0}.gain{color:#15803d}.loss{color:#b91c1c}
+.muted{color:#64748b;font-size:13px}.qr svg{width:180px;height:180px}"""
 
 
 _EMBED_CSS = ("html,body{background:transparent}body{display:block;padding:28px 32px 48px}.card{box-shadow:none;border-radius:0;padding:0;"
@@ -768,6 +812,46 @@ def done_page() -> str:
 <p class="sub">Your account is ready.</p><a class="cta" href="/login" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Sign in →</a>""")
 
 
+def _usage_cell(p: dict) -> str:
+    """Profit (bold, green/red) over paid and real-cost lines for one period."""
+    profit = p["charged"] - p["provider"]
+    cls = "gain" if profit > 0 else ("loss" if profit < 0 else "muted")
+    sign = "+" if profit > 0 else ("−" if profit < 0 else "")
+    uses = " · %d uses" % p["n"] if p["n"] else ""
+    return (f'<b class="{cls}">{sign}{usd(abs(profit))}</b><br>'
+            f'<span class="muted">paid {usd(p["charged"])} · cost {usd(p["provider"])}{uses}</span>')
+
+
+_EMPTY_USAGE = {"n": 0, "charged": 0, "provider": 0}
+_PERIODS = (("today", "Today"), ("d7", "Last 7 days"), ("d30", "Last 30 days"), ("all", "All time"))
+
+
+def _usage_html(users: list[dict], report: dict) -> str:
+    rows = []
+    for u in users:
+        data = report["users"].get(u["id"])
+        cells = "".join(f'<td>{_usage_cell(data[k] if data else _EMPTY_USAGE)}</td>' for k, _ in _PERIODS)
+        rows.append(f'<tr><td>{_E(u["username"])}<br><span class="muted">{_E(u["role"])}</span></td>{cells}</tr>')
+    totals = "".join(f'<td>{_usage_cell(report["total"][k])}</td>' for k, _ in _PERIODS)
+    head = "".join(f"<th>{label}</th>" for _, label in _PERIODS)
+    return ('<h2>Usage &amp; profit</h2><p class="muted">Paid = what users were charged in credits (provider cost × price '
+            'multiplier). Cost = what the AI providers really billed. Profit = paid − cost. Tracked from when this feature '
+            'went live; safety checks, Enhance and Write story (small Anthropic costs) are not included, so true profit is '
+            'slightly lower. Admin use shows as cost with nothing paid.</p>'
+            f'<table class="usage"><tr><th>User</th>{head}</tr>{"".join(rows)}'
+            f'<tr class="tot"><td><b>Everyone</b></td>{totals}</tr></table>')
+
+
+def _usage_by_type_html(by_kind: dict) -> str:
+    if not by_kind:
+        return '<div class="hint">No billable use in the last 30 days.</div>'
+    rows = "".join(
+        f'<tr><td>{_E(USAGE_LABELS.get(k, k))}</td><td>{v["n"]}</td><td>{usd(v["charged"])}</td><td>{usd(v["provider"])}</td>'
+        f'<td>{usd(v["charged"] - v["provider"])}</td></tr>' for k, v in sorted(by_kind.items()))
+    return ('<table class="usage"><tr><th>Type</th><th>Uses</th><th>Paid</th><th>Cost</th><th>Profit</th></tr>'
+            f'{rows}</table>')
+
+
 def _violations_html() -> str:
     events = recent_violations()
     if not events:
@@ -783,9 +867,11 @@ def _violations_html() -> str:
 
 def admin_page(me: dict, notice: str = "", link: str = "", error: str = "", embed: bool = False) -> str:
     csrf = _E(me["csrf"])
+    report = usage_report()
     q = "?embed=1" if embed else ""          # keeps every form post inside the embedded pane
     rows = []
-    for u in list_users():
+    all_users = list_users()
+    for u in all_users:
         state = (("suspended — safety" if u["disabled_reason"] == "safety" else "disabled") if u["disabled"]
                  else ("active" if u["enrolled"] else "awaiting setup"))
         if u["violations"]:
@@ -836,7 +922,9 @@ def admin_page(me: dict, notice: str = "", link: str = "", error: str = "", embe
                      f'<label class="f" for="dm{u["id"]}">Daily screen time (minutes) — 0 means no limit</label>'
                      f'<input id="dm{u["id"]}" name="daily_minutes" inputmode="numeric" value="{u["daily_minutes"]}">'
                      f'<div class="f">Allowed engines</div><div class="engines">{boxes}</div>'
-                     f'<button>Save limits</button></form></div></details></td></tr>')
+                     f'<button>Save limits</button></form>'
+                     f'<div class="f">Usage by type (last 30 days)</div>{_usage_by_type_html(report["by_kind"].get(u["id"], {}))}'
+                     f'</div></details></td></tr>')
         rows.append(f'<tr><td>{_E(u["username"])}</td><td>{_E(u["role"])}</td><td>{state}</td>'
                     f'<td>{credit_cell}</td><td>{acts}</td></tr>{panel}')
     note = f'<p class="ok">{_E(notice)}</p>' if notice else ""
@@ -848,6 +936,7 @@ def admin_page(me: dict, notice: str = "", link: str = "", error: str = "", embe
                  f'<script>{COPY_JS}</script>')
     return _page("SparkGarden — Admin", f"""<h1>Users &amp; credits</h1>{note}{_err(error)}
 <table><tr><th>User</th><th>Role</th><th>Status</th><th>Credits</th><th></th></tr>{''.join(rows)}</table>
+{_usage_html(all_users, report)}
 {_violations_html()}
 <h2>Add user</h2><form method="POST" action="/admin/users{q}">
 <input type="hidden" name="csrf" value="{csrf}">

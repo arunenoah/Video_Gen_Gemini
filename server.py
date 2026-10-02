@@ -202,10 +202,15 @@ def make_id(prompt: str) -> str:
 
 
 def job_update(job_id: str, **fields) -> None:
-    settle = None
+    settle = usage = None
     with JOBS_LOCK:
         job = JOBS.setdefault(job_id, {})
         job.update(fields)
+        if job.get("status") == "done" and job.get("kind") and not job.get("logged"):
+            job["logged"] = True                      # one usage row per job, whatever happens to later updates
+            cost = job.get("cost") or 0
+            usage = (job.get("owner"), job["kind"], job.get("engine", ""), cost,
+                     auth.to_micro(cost * PRICE_MULTIPLIER) if job.get("reserved") else 0)
         # finished job holding a credit reservation → settle exactly once (failed = full refund)
         if job.get("status") in ("done", "failed") and job.get("reserved") and not job.get("settled"):
             job["settled"] = True
@@ -213,6 +218,8 @@ def job_update(job_id: str, **fields) -> None:
             settle = (job["owner"], job["reserved"], actual)
     if settle:
         auth.settle(*settle)
+    if usage and usage[0]:
+        auth.record_usage(*usage)                     # provider cost vs what the user was charged → admin profit view
 
 
 def run_generation(job_id: str, gen_id: str, payload: dict, image_path: Path | None,
@@ -342,7 +349,7 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
         meta = _finalize_story(story_id, clip_ids, title, payload["tier"], payload["resolution"],
                                pending=[], created_at=created_at,
                                aspect=payload.get("aspect", "16:9"))
-        job_update(job_id, status="done", detail="done", genId=story_id, cost=meta["cost"])
+        job_update(job_id, status="done", detail="done", genId=story_id, cost=new_run_cost(meta["cost"], prior_ids))
     except Exception as exc:
         err = _redact(str(exc))[:300]
         if clip_ids:  # save a playable partial story + what's left to generate
@@ -352,7 +359,7 @@ def run_story(job_id: str, story_id: str, payload: dict, image_paths: list[Path]
                 meta = _finalize_story(story_id, clip_ids, title, payload["tier"], payload["resolution"],
                                        pending=pending, created_at=created_at,
                                        aspect=payload.get("aspect", "16:9"))
-                job_update(job_id, status="done", genId=story_id, cost=meta["cost"], partial=True,
+                job_update(job_id, status="done", genId=story_id, cost=new_run_cost(meta["cost"], prior_ids), partial=True,
                            detail=f"partial: {len(clip_ids)}/{n_total} scenes done ({err}) — "
                                   f"use Generate remaining when quota resets")
                 return
@@ -541,6 +548,13 @@ def _save_b64_images(raw_list: list, out_dir: Path, prefix: str, max_n: int):
     return paths, None
 
 
+def new_run_cost(total_cost: float, prior_ids: list[str]) -> float:
+    """Provider cost of THIS run only. A resumed story's meta cost is cumulative (it sums every clip, old and new), but the
+    earlier clips were already billed by the run that made them — charging the total again would bill them twice."""
+    prior = sum(_load_meta(c).get("cost", 0) for c in prior_ids)
+    return round(max(0.0, total_cost - prior), 4)
+
+
 def _load_meta(gen_id: str) -> dict:
     try:
         return json.loads((GENERATIONS / gen_id / "meta.json").read_text())
@@ -722,7 +736,7 @@ class Handler(SimpleHTTPRequestHandler):
         job_id = uuid.uuid4().hex
         est = engine_estimate(tier, resolution, duration)
         if not self._charge(job_id, est, lambda: (shutil.rmtree(GENERATIONS / gen_id, ignore_errors=True),
-                                                  auth.release(gen_id))):
+                                                  auth.release(gen_id)), "video", tier):
             return
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=est)
         args = {"prompt": prompt, "tier": tier, "resolution": resolution,
@@ -812,7 +826,7 @@ class Handler(SimpleHTTPRequestHandler):
         job_id = uuid.uuid4().hex
         est = sum(engine_estimate(tier, resolution, s["duration"]) for s in scenes)
         if not self._charge(job_id, est, lambda: (shutil.rmtree(out_dir, ignore_errors=True),
-                                                  auth.release(story_id))):
+                                                  auth.release(story_id)), "video", tier):
             return
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=round(est, 4))
         args = {"scenes": scenes, "tier": tier, "resolution": resolution, "aspect": aspect,
@@ -993,7 +1007,7 @@ class Handler(SimpleHTTPRequestHandler):
         job_id = uuid.uuid4().hex
         est = sum(engine_estimate(tier, resolution, s["duration"]) for s in scenes)
         if not self._charge(job_id, est, lambda: (shutil.rmtree(out_dir, ignore_errors=True),
-                                                  auth.release(story_id))):
+                                                  auth.release(story_id)), "video", tier):
             return
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=round(est, 4))
         args = {"scenes": scenes, "tier": tier, "resolution": resolution, "aspect": aspect,
@@ -1133,7 +1147,7 @@ class Handler(SimpleHTTPRequestHandler):
         }
         job_id = uuid.uuid4().hex
         est = sum(engine_estimate(args["tier"], args["resolution"], s.get("duration", 8)) for s in pending)
-        if not self._charge(job_id, est):
+        if not self._charge(job_id, est, None, "video", tier):
             return
         job_update(job_id, status="queued", detail="queued", genId=None, owner=self.user["id"], estCost=round(est, 4))
         threading.Thread(target=run_story,
@@ -1198,6 +1212,11 @@ class Handler(SimpleHTTPRequestHandler):
             return None
         return reserved
 
+    def _log_usage(self, kind: str, engine: str, provider_usd: float, reserved: int) -> None:
+        """Usage row for a finished synchronous call: real provider cost vs what the user was charged (0 for admins/free)."""
+        auth.record_usage(self.user["id"], kind, engine, provider_usd,
+                          auth.to_micro(provider_usd * PRICE_MULTIPLIER) if reserved else 0)
+
     def _settle_sync(self, reserved: int, actual_usd: float) -> None:
         if reserved:                       # 0 = admin / free model → nothing was held
             auth.settle(self.user["id"], reserved, auth.to_micro(actual_usd * PRICE_MULTIPLIER))
@@ -1246,6 +1265,7 @@ class Handler(SimpleHTTPRequestHandler):
             print(f"chat error: {_redact(str(exc))[:200]}")
             return self._json(502, {"error": "Sunny is taking a short nap. Please try again in a moment."})
         self._settle_sync(reserved, cost)
+        self._log_usage("chat", engine, cost, reserved)
         if not text:
             return self._json(502, {"error": "Sunny didn't have an answer that time. Try asking another way!"})
         verdict = safety.check(text)
@@ -1287,6 +1307,7 @@ class Handler(SimpleHTTPRequestHandler):
             print(f"image error: {_redact(str(exc))[:300]}")
             return self._json(502, {"error": "We couldn't draw that one. Try describing it a different way!"})
         self._settle_sync(reserved, cost)
+        self._log_usage("image", engine, cost, reserved)
         gen_id = self._new_id("image-" + prompt)
         out_dir = GENERATIONS / gen_id
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1718,7 +1739,7 @@ class Handler(SimpleHTTPRequestHandler):
         self._json(402, {"error": "You have no credits left. Ask an admin to add credits."})
         return True
 
-    def _charge(self, job_id: str, est: float, cleanup=None) -> bool:
+    def _charge(self, job_id: str, est: float, cleanup=None, kind: str = "video", engine: str = "") -> bool:
         """Reserve est USD from the user's credits; on refusal run cleanup, send 402 and return False."""
         reserved, err = auth.reserve(self.user, est * PRICE_MULTIPLIER)
         if err:
@@ -1726,8 +1747,7 @@ class Handler(SimpleHTTPRequestHandler):
                 cleanup()
             self._json(402, {"error": err})
             return False
-        if reserved:
-            job_update(job_id, reserved=reserved)
+        job_update(job_id, reserved=reserved, kind=kind, engine=engine)      # reserved is 0 for admins / free models
         return True
 
     def _ping(self):
