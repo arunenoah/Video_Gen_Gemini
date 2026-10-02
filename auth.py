@@ -605,7 +605,17 @@ COPY_JS = ("document.querySelectorAll('[data-copy]').forEach(function(b){b.addEv
            "var i=document.getElementById(b.dataset.copy);i.select();var ok=false;"
            "try{ok=document.execCommand('copy')}catch(e){}"
            "if(!ok&&navigator.clipboard){navigator.clipboard.writeText(i.value)}b.textContent='Copied';});});")
-COPY_JS_CSP = "'sha256-" + base64.b64encode(hashlib.sha256(COPY_JS.encode()).digest()).decode() + "'"
+PWD_JS = ("document.querySelectorAll('[data-eye]').forEach(function(b){b.addEventListener('click',function(){"
+          "var i=document.getElementById(b.dataset.eye);var show=i.type==='password';i.type=show?'text':'password';"
+          "b.setAttribute('aria-label',show?'Hide password':'Show password');b.style.opacity=show?'1':'.6';});});")
+
+
+def _csp_hash(js: str) -> str:
+    return "'sha256-" + base64.b64encode(hashlib.sha256(js.encode()).digest()).decode() + "'"
+
+
+COPY_JS_CSP = _csp_hash(COPY_JS)
+SCRIPT_SRC = COPY_JS_CSP + " " + _csp_hash(PWD_JS)       # the only inline scripts the pages may run
 _E = html.escape
 _CSS = """body{font-family:'Instrument Sans',-apple-system,sans-serif;background:#f7f8fa;display:flex;
 align-items:flex-start;justify-content:center;margin:0;padding:48px 16px}
@@ -620,7 +630,7 @@ td button{padding:5px 9px;font-size:12px;margin-right:4px}code{background:#f1f5f
 word-break:break-all}.copyrow{display:flex;gap:8px}.copyrow input{margin-bottom:12px;flex:1}.copyrow button{height:40px;white-space:nowrap}.panel{padding:6px 0 12px;max-width:640px}.f{display:block;font-size:13px;font-weight:700;color:#374151;margin:12px 0 5px}.hint{font-size:12.5px;color:#94a3b8;margin:6px 0 6px}.warn{color:#b45309;font-weight:700;font-size:13px}form.stack2{margin:0 0 6px}.row{display:flex;gap:8px}.row input{margin-bottom:0;flex:1}.chk{display:inline-block;margin:0 12px 6px 0;font-size:13px}.chk input{width:auto;margin:0 4px 0 0}details{padding:6px 0}summary{cursor:pointer;font-size:13px;color:#177bb5;font-weight:600}form.inline{display:flex;gap:8px;margin:10px 0}form.inline input{margin-bottom:0;flex:1}.engines{margin:4px 0 10px}.logo{display:block;margin:0 auto 14px;border-radius:12px}.muted{color:#64748b;font-size:13px}.qr svg{width:180px;height:180px}"""
 
 
-_EMBED_CSS = ("body{background:#fff;display:block;padding:28px 32px 48px}.card{box-shadow:none;border-radius:0;padding:0;"
+_EMBED_CSS = ("html,body{background:transparent}body{display:block;padding:28px 32px 48px}.card{box-shadow:none;border-radius:0;padding:0;"
               "max-width:980px;margin:0}h1{font-size:22px;font-family:'Inter',sans-serif;letter-spacing:-.4px}")
 
 
@@ -648,40 +658,112 @@ def _err(msg: str) -> str:
     return f'<p class="err">{_E(msg)}</p>' if msg else ""
 
 
+BRAND = ("Spark", "Garden")                       # wordmark shown on sign-in pages (blue + amber)
+_SPLIT_CSS = """
+html,body{height:100%}
+body.split{display:flex;flex-direction:row-reverse;align-items:stretch;padding:0;margin:0;background:#fff;color:#0a0f2c;
+font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+.left{flex:1;min-width:440px;padding:40px 64px;display:flex;flex-direction:column;overflow-y:auto;box-sizing:border-box}
+.brand{width:100%;max-width:500px;margin:0 auto;display:flex;align-items:center;gap:12px;font-weight:800;font-size:34px;letter-spacing:-.6px;line-height:1}
+.brand img{width:54px;height:54px;border-radius:15px;display:block}
+.w1{color:#1355f2}.w2{color:#f5a300}
+.mid{width:100%;max-width:500px;margin:auto;padding:28px 0}
+h1.hello{font-size:44px;line-height:1.05;font-weight:800;letter-spacing:-1.2px;margin:0 0 10px}
+.sub{font-size:19px;color:#4a5470;margin:0 0 26px;line-height:1.4}
+label.fl{display:block;font-weight:700;font-size:15px;margin:18px 0 8px}
+.field{position:relative}
+.field svg.ic{position:absolute;left:17px;top:50%;transform:translateY(-50%);pointer-events:none}
+.field input{width:100%;height:54px;padding:0 50px 0 52px;border:1.5px solid #ccd3e0;border-radius:14px;font-size:16px;margin:0;
+background:#fff;box-sizing:border-box;font-family:inherit;color:#0a0f2c}
+.field input.plain{padding-left:18px}
+.field input:focus{outline:none;border-color:#1355f2;box-shadow:0 0 0 4px rgba(19,85,242,.14)}
+.eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:transparent;border:none;padding:10px;cursor:pointer;opacity:.6;display:flex}
+.cta{width:100%;height:58px;margin-top:24px;border:none;border-radius:999px;background:#1355f2;color:#fff;font-size:19px;font-weight:800;
+cursor:pointer;box-shadow:0 10px 24px rgba(19,85,242,.28);font-family:inherit}
+.cta:hover{background:#0e47d4}
+.cta:focus-visible{outline:3px solid #9db8ff;outline-offset:2px}
+.err{color:#d12b2b;background:#fff1f1;border:1px solid #ffd0d0;border-radius:12px;padding:11px 14px;font-size:14.5px;margin:0 0 6px}
+.or{display:flex;align-items:center;gap:14px;color:#6b7390;margin:26px 0 16px;font-size:14px}
+.or:before,.or:after{content:"";flex:1;height:1px;background:#d9deea}
+.alt{text-align:center;font-size:16px}
+.alt a{color:#1355f2;text-decoration:underline}
+.hero{flex:none;height:100%;aspect-ratio:1122/1402;max-width:56vw;position:relative;overflow:hidden;background:#1d6bff url(/ui/login-hero-v2.jpg) center/cover no-repeat}
+.hero .copy{position:absolute;left:0;right:0;top:5%;padding:0 7%;text-align:center;color:#fff;text-shadow:0 2px 14px rgba(8,40,140,.35)}
+.hero h2{margin:0;font-size:clamp(26px,4.6vh,54px);line-height:1.06;font-weight:800;letter-spacing:-1px}
+.hero p{margin:10px 0 0;font-size:clamp(14px,2.1vh,21px);color:rgba(255,255,255,.93);font-weight:500}
+.muted{color:#5b6580;font-size:14px;line-height:1.5}code{background:#f1f5f9;padding:2px 6px;border-radius:5px;word-break:break-all}
+.qr svg{width:190px;height:190px}.steps{counter-reset:s}
+@media(max-width:860px){.hero{display:none}.left{min-width:0;padding:26px 22px}h1.hello{font-size:36px}}
+"""
+_IC_USER = ('<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7390" stroke-width="1.8" '
+            'stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>')
+_IC_LOCK = ('<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7390" stroke-width="1.8" '
+            'stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10.5" width="16" height="10" rx="2.5"/>'
+            '<path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>')
+_IC_KEY = ('<svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#6b7390" stroke-width="1.8" '
+           'stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 6v6c0 4.5 3.4 8 8 9 4.6-1 8-4.5 8-9V6z"/>'
+           '<path d="m9 12 2 2 4-4"/></svg>')
+_IC_EYE = ('<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#3b4666" stroke-width="1.8" '
+           'stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/>'
+           '<circle cx="12" cy="12" r="3"/></svg>')
+
+
+def _split_page(title: str, body: str) -> str:
+    """Two-panel sign-in layout: form on the left, illustration on the right (hidden on small screens)."""
+    icon = '<link rel="icon" href="%s">' % _FAVICON if _FAVICON else ""
+    logo = '<img src="%s" alt="">' % _LOGO if _LOGO else ""
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,'
+            f'initial-scale=1"><title>{_E(title)}</title>{icon}<style>{_SPLIT_CSS}</style></head><body class="split">'
+            f'<main class="left"><div class="brand">{logo}<span><span class="w1">{BRAND[0]}</span>'
+            f'<span class="w2">{BRAND[1]}</span></span></div><div class="mid">{body}</div></main>'
+            f'<aside class="hero" role="img" aria-label="A penguin floating with balloons beside a castle picture, a story and a movie">'
+            f'<div class="copy"><h2>Big ideas start with you.</h2><p>Make pictures, tell stories and bring them to life.</p></div></aside>'
+            f'<script>{PWD_JS}</script></body></html>')
+
+
+def _field(name: str, label: str, placeholder: str, icon: str, kind: str = "text", extra: str = "", eye: bool = False) -> str:
+    eye_btn = (f'<button type="button" class="eye" data-eye="{name}" aria-label="Show password">{_IC_EYE}</button>' if eye else "")
+    return (f'<label class="fl" for="{name}">{_E(label)}</label><div class="field">{icon}'
+            f'<input id="{name}" name="{name}" type="{kind}" placeholder="{_E(placeholder)}" {extra} required>{eye_btn}</div>')
+
+
 def login_page(error: str = "") -> str:
-    return _page("SparkGarden — Sign in", f"""<h1>SparkGarden</h1>{_err(error)}
-<form class="stack" method="POST" action="/login">
-<input name="username" placeholder="Username" autocomplete="username" autofocus required>
-<input type="password" name="password" placeholder="Password" autocomplete="current-password" required>
-<button type="submit">Continue</button></form>""")
+    return _split_page(f"{BRAND[0]}{BRAND[1]} — Sign in", f"""<h1 class="hello">Ready to create?</h1>
+<p class="sub">Sign in to start your next adventure.</p>{_err(error)}
+<form method="POST" action="/login">
+{_field('username', 'Username', 'Enter your username', _IC_USER, extra='autocomplete="username" autofocus')}
+{_field('password', 'Password', 'Enter your password', _IC_LOCK, 'password', 'autocomplete="current-password"', eye=True)}
+<button class="cta" type="submit">Let\'s create →</button></form>""")
 
 
 def totp_page(error: str = "") -> str:
-    return _page("SparkGarden — Verify", f"""<h1>Two-factor code</h1>
-<p class="muted">Enter the 6-digit code from your authenticator app.</p>{_err(error)}
-<form class="stack" method="POST" action="/login/2fa">
-<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{{6}}" maxlength="6"
-placeholder="123456" autofocus required><button type="submit">Sign in</button></form>
-<p class="muted"><a href="/login">Start over</a></p>""")
+    return _split_page(f"{BRAND[0]}{BRAND[1]} — Verify", f"""<h1 class="hello">One more step</h1>
+<p class="sub">Open your authenticator app and type the 6-digit code.</p>{_err(error)}
+<form method="POST" action="/login/2fa">
+{_field('code', 'Your code', '123456', _IC_KEY, extra='inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" autofocus')}
+<button class="cta" type="submit">Verify →</button></form>
+<div class="or">or</div><div class="alt"><a href="/login">← Start over</a></div>""")
 
 
 def enroll_page(token: str, user: dict, error: str = "") -> str:
-    uri = f"otpauth://totp/SparkGarden:{user['username']}?secret={user['totp_secret']}&issuer=SparkGarden"
+    uri = f"otpauth://totp/{BRAND[0]}{BRAND[1]}:{user['username']}?secret={user['totp_secret']}&issuer={BRAND[0]}{BRAND[1]}"
     qr = ""
     if segno:
         qr = f'<div class="qr">{segno.make(uri, error="m").svg_inline(scale=4, border=2)}</div>'
-    return _page("SparkGarden — Set up account", f"""<h1>Set up {_E(user['username'])}</h1>
-<p class="muted">1. Scan this with an authenticator app (Google Authenticator, Authy, 1Password…).</p>{qr}
-<p class="muted">Can't scan? Enter this key manually: <code>{_E(user['totp_secret'])}</code></p>
-<p class="muted">2. Choose a password and enter the 6-digit code the app shows.</p>{_err(error)}
-<form class="stack" method="POST" action="/enroll/{_E(token)}">
-<input type="password" name="password" placeholder="New password ({PW_MIN}+ characters)" autocomplete="new-password" required>
-<input name="code" inputmode="numeric" pattern="[0-9]{{6}}" maxlength="6" placeholder="6-digit code" required>
-<button type="submit">Finish setup</button></form>""")
+    return _split_page(f"{BRAND[0]}{BRAND[1]} — Set up account", f"""<h1 class="hello" style="font-size:36px">Welcome, {_E(user['username'])}!</h1>
+<p class="sub" style="margin-bottom:14px">Let's set up your account in two quick steps.</p>
+<p class="muted"><b>1.</b> Scan this with an authenticator app (Google Authenticator, Authy, 1Password…).</p>{qr}
+<p class="muted">Can't scan? Type this key in the app: <code>{_E(user['totp_secret'])}</code></p>
+<p class="muted"><b>2.</b> Choose a password and type the 6-digit code the app shows.</p>{_err(error)}
+<form method="POST" action="/enroll/{_E(token)}">
+{_field('password', 'New password', f'At least {PW_MIN} characters', _IC_LOCK, 'password', 'autocomplete="new-password"', eye=True)}
+{_field('code', 'Code from the app', '123456', _IC_KEY, extra='inputmode="numeric" pattern="[0-9]{6}" maxlength="6"')}
+<button class="cta" type="submit">Finish setup →</button></form>""")
 
 
 def done_page() -> str:
-    return _page("SparkGarden — Ready", '<h1>All set</h1><p>Your account is ready.</p><p><a href="/login">Sign in</a></p>')
+    return _split_page(f"{BRAND[0]}{BRAND[1]} — Ready", """<h1 class="hello">You're all set! 🎉</h1>
+<p class="sub">Your account is ready.</p><a class="cta" href="/login" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Sign in →</a>""")
 
 
 def _violations_html() -> str:

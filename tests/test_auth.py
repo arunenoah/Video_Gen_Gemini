@@ -369,7 +369,7 @@ class HttpIsolationTests(LiveServerCase):
         self.assertIn(b'data-copy="setup-link"', r.body)
         self.assertIn(b"/enroll/", r.body)
         csp = r.getheader("Content-Security-Policy")
-        self.assertIn(f"script-src {auth.COPY_JS_CSP}", csp)
+        self.assertIn(f"script-src {auth.SCRIPT_SRC}", csp)
         self.assertNotIn("unsafe-inline'; img", csp.split("style-src")[0])   # scripts stay locked down
 
     # ── credits over HTTP ───────────────────────────────────────────────────────
@@ -491,6 +491,30 @@ class HttpIsolationTests(LiveServerCase):
         self.assertIn(b"/enroll/", r.body)
         r = self.req("admin", "POST", "/admin/users?embed=1", urlencode({"username": "x", "csrf": "bad"}), True)
         self.assertEqual((r.status, r.getheader("X-Frame-Options")), (403, "SAMEORIGIN"))
+
+    def test_should_render_the_two_panel_sign_in_without_forgot_password_or_parent_links(self):
+        page = self._raw("GET", "/login").body.decode()
+        for piece in ("Ready to create?", "Sign in to start your next adventure.", 'type="password"', 'autocomplete="current-password"',
+                      'autocomplete="username"', "Let's create", 'data-eye="password"', 'class="hero"', "Big ideas start with you."):
+            self.assertIn(piece, page, piece)
+        self.assertIn("flex-direction:row-reverse", page)                     # illustration left, form right
+        for gone in ("Forgot password", "Parent sign-in", "parent=1"):
+            self.assertNotIn(gone, page, gone)
+
+    def test_should_serve_only_the_hero_image_before_sign_in(self):
+        r = self._raw("GET", "/ui/login-hero-v2.jpg")
+        self.assertEqual((r.status, r.getheader("Content-Type")), (200, "image/jpeg"))
+        self.assertTrue(r.body.startswith(b"\xff\xd8\xff"))
+        for private in ("/ui/logo.png", "/ui/vg-core.jsx", "/ui/VideoGen.html"):
+            self.assertEqual(self._raw("GET", private).status, 302, private)        # everything else still needs a session
+
+    def test_should_pin_the_password_toggle_script_in_the_csp_and_allow_the_hero_image(self):
+        r = self._raw("GET", "/login")
+        csp = r.getheader("Content-Security-Policy")
+        self.assertIn(auth._csp_hash(auth.PWD_JS), csp)
+        self.assertIn("img-src 'self' data:", csp)
+        self.assertNotIn("unsafe-inline'; img", csp.split("style-src")[0])           # scripts stay locked down
+        self.assertIn(f"<script>{auth.PWD_JS}</script>", r.body.decode())
 
     def test_should_show_the_logo_on_sign_in_pages(self):
         self.assertIn(b"data:image/png;base64", self._raw("GET", "/login").body)

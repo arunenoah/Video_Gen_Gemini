@@ -644,7 +644,7 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
   );
 
   return (
-    <div style={{ minHeight: '100vh', background: theme.page, transition: 'background .3s' }}>
+    <div style={{ minHeight: '100vh', background: embedded ? 'transparent' : theme.page, transition: 'background .3s' }}>
       {/* ---------- HEADER ---------- */}
       <header style={{
         position: 'sticky', top: 0, zIndex: 30,

@@ -214,7 +214,7 @@ function Composer({ theme, placeholder, busy, disabled, onSend, footnote, canAtt
   };
   const can = (text.trim() || pic) && !busy && !disabled;
   return (
-    <div style={{ padding: '0 16px 14px', background: 'linear-gradient(180deg,rgba(255,255,255,0) 0%,#fff 28%)' }}
+    <div style={{ padding: '0 16px 14px' }}
       onDragOver={e => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)}
       onDrop={e => { e.preventDefault(); setDragOver(false); attach(e.dataTransfer.files && e.dataTransfer.files[0]); }}>
       <div style={{ maxWidth: 760, margin: '0 auto' }}>
@@ -596,7 +596,7 @@ function Sidebar({ theme, mode, setMode, convs, activeId, onNew, onSelect, onDel
     );
   };
   return (
-    <aside style={{ width: 272, background: '#f9fafb', borderRight: '1px solid #eceef1', display: 'flex', flexDirection: 'column', height: '100%', flexShrink: 0 }}>
+    <aside style={{ width: 272, background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', borderRight: '1px solid rgba(226,232,240,0.8)', display: 'flex', flexDirection: 'column', height: '100%', flexShrink: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 14px 8px 16px' }}>
         <VGLogo theme={theme} size={30} />
         <button onClick={onClose} aria-label="Hide sidebar" style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: 6, borderRadius: 8 }}><VGIcon name="panel" size={19} color="#6b7280" /></button>
@@ -735,7 +735,7 @@ function AppShell({ theme, renderVideo }) {
   );
 
   return (
-    <div style={{ display: 'flex', height: '100vh', background: '#fff', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', height: '100vh', background: '#f6faff url(/ui/app-bg-v1.jpg) center/cover no-repeat', position: 'relative', overflow: 'hidden' }}>
       {open && !narrow && <Sidebar theme={theme} mode={mode} setMode={setMode} convs={convs} activeId={convId} user={user} narrow={false} clock={clock}
         onNew={() => { setActive(a => ({ ...a, [mode]: null })); setViewKey(k => k + 1); }} onSelect={id => { setActive(a => ({ ...a, [mode]: id })); setViewKey(k => k + 1); }}
         onDelete={id => { remove(mode, id); setActive(a => a[mode] === id ? { ...a, [mode]: null } : a); if (id === convId) setViewKey(k => k + 1); }} onClose={() => toggle(false)} />}
@@ -747,7 +747,8 @@ function AppShell({ theme, renderVideo }) {
           <div onClick={() => toggle(false)} style={{ flex: 1, background: 'rgba(15,20,25,.35)' }} />
         </div>
       )}
-      <main style={{ flex: 1, minWidth: 0, height: '100%', position: 'relative', overflowY: mode === 'video' ? 'auto' : 'hidden' }}>
+      <div style={{ flex: 1, minWidth: 0, height: '100%', position: 'relative' }}>
+      <main style={{ height: '100%', position: 'relative', overflowY: mode === 'video' ? 'auto' : 'hidden' }}>
         {menuBtn}
         {videoSeen && <div style={{ display: mode === 'video' && !locked ? 'block' : 'none' }}>{renderVideo({ embedded: true, injected, narrow, menuVisible: !open || narrow })}</div>}
         {mode === 'users' && user.role === 'admin' && (
@@ -762,6 +763,7 @@ function AppShell({ theme, renderVideo }) {
               onUseScript={useScript} onUseImage={useImage} onDraw={drawThis} prefill={mode === 'image' ? prefill : null} toast={toast} narrow={narrow} />}
         {toastMsg && <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 60, background: '#0f1419', color: '#fff', padding: '11px 20px', borderRadius: 999, fontWeight: 700, fontSize: 14, boxShadow: '0 12px 32px rgba(0,0,0,.28)' }}>{toastMsg}</div>}
       </main>
+      </div>
     </div>
   );
 }

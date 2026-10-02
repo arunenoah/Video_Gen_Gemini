@@ -515,6 +515,8 @@ class Handler(SimpleHTTPRequestHandler):
         if not self._host_ok():
             return
         path = self.path.split("?", 1)[0]
+        if path == "/ui/login-hero-v2.jpg":                 # the only asset the sign-in page needs before anyone is signed in
+            return self._public_hero()
         if path == "/login":
             return self._html(200, auth.login_page())
         if path == "/login/2fa":
@@ -1381,7 +1383,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("X-Frame-Options", "SAMEORIGIN" if framable else "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Security-Policy",
-                         f"default-src 'none'; script-src {auth.COPY_JS_CSP}; style-src 'unsafe-inline'; img-src data:; "
+                         f"default-src 'none'; script-src {auth.SCRIPT_SRC}; style-src 'unsafe-inline'; img-src 'self' data:; "
                          f"form-action 'self'; frame-ancestors {chr(39)}{'self' if framable else 'none'}{chr(39)}")
         for c in cookies:
             self.send_header("Set-Cookie", c)
@@ -1413,6 +1415,15 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _origin(self) -> str:
         return f"{'https' if COOKIE_SECURE else 'http'}://{self.headers.get('Host', '')}"
+
+    def _public_hero(self):
+        data = (ROOT / "ui" / "login-hero-v2.jpg").read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _login_post(self):
         form = self._form()
