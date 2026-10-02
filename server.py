@@ -569,7 +569,7 @@ class Handler(SimpleHTTPRequestHandler):
             token = path[len("/enroll/"):]
             user = auth.enrollment_user(token)
             if not user:
-                return self._html(404, auth.login_page("This setup link is invalid or has expired."))
+                return self._html(404, auth.login_page("This setup link was already used, replaced by a newer one, or has expired. If you already finished setting up, just sign in; otherwise ask your admin for a new link."))
             return self._html(200, auth.enroll_page(token, user))
         if not self._authed():
             return self._redirect("/login")
@@ -1525,7 +1525,7 @@ class Handler(SimpleHTTPRequestHandler):
     def _enroll_post(self, token: str):
         user = auth.enrollment_user(token)
         if not user:
-            return self._html(404, auth.login_page("This setup link is invalid or has expired."))
+            return self._html(404, auth.login_page("This setup link was already used, replaced by a newer one, or has expired. If you already finished setting up, just sign in; otherwise ask your admin for a new link."))
         form = self._form()
         if form is None:
             return self._html(400, auth.enroll_page(token, user, "Invalid request."))
@@ -1772,6 +1772,9 @@ if __name__ == "__main__":
         else:
             base = f"{'https' if os.environ.get('VIDEOGEN_TLS_CERT') else 'http'}://{first}:{PORT}"
         print(f"ADMIN SETUP (one-time link, 24 h): {base}/enroll/{token}")
+        print("  (every restart issues a NEW link until the admin finishes setup — always use the LAST one in the log)")
+    else:
+        print("Admin account is already set up — sign in at /login with username 'admin'. No setup link is printed.")
     print("Sign-in: username + password + authenticator code (accounts in users.db)")
     print(f"Public hosts accepted: {', '.join(_public_hosts) or '(none — only localhost)'}")
     print(f"Open → http://127.0.0.1:{PORT}/")

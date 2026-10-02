@@ -314,7 +314,7 @@ def complete_enrollment(token: str, password: str, code: str, ip: str) -> str:
         return "Too many attempts — try again in a few minutes."
     user = enrollment_user(token)
     if not user:
-        return "This setup link is invalid or has expired."
+        return "This setup link was already used, replaced by a newer one, or has expired. If you already finished setting up, just sign in; otherwise ask your admin for a new link."
     err = password_error(password)
     if err:
         return err
@@ -326,7 +326,7 @@ def complete_enrollment(token: str, password: str, code: str, ip: str) -> str:
         done = c.execute("UPDATE users SET pw_hash=?, enroll_hash=NULL, enroll_expires=0, last_totp_step=? "
                          "WHERE id=? AND enroll_hash=?", (hash_password(password), step, user["id"], _sha(token)))
         if done.rowcount != 1:
-            return "This setup link is invalid or has expired."
+            return "This setup link was already used, replaced by a newer one, or has expired. If you already finished setting up, just sign in; otherwise ask your admin for a new link."
     return ""
 
 
