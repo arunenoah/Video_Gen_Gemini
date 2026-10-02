@@ -85,6 +85,14 @@ class BundleToolTests(unittest.TestCase):
                 self.assertEqual(im.format, "JPEG")
         self.assertEqual(sorted(p.name for p in dest.glob("asset*.jpg")), [a["file"] for a in data["assets"]])
 
+    def test_should_number_pictures_that_share_a_label(self):
+        gen = make_generation(self.gens)
+        make_png(gen / "src03.png", (30, 30, 200))
+        labels = [a["label"] for a in json.loads((self.bundle(gen) / "example.json").read_text())["assets"]]
+        self.assertEqual(labels.count("Scene picture 1"), 1)
+        self.assertEqual(labels.count("Scene picture 2"), 1)
+        self.assertEqual(len(set(labels)), len(labels))                             # every label is unique
+
     def test_should_refuse_unsafe_text_and_leave_nothing_behind(self):
         gen = make_generation(self.gens, prompts={2: "a story with gore and torture"})
         with self.assertRaises(tool.BundleError) as ctx:

@@ -1,0 +1,36 @@
+{
+  "id": "sunset-lizard-adventure",
+  "title": "A sunset adventure with a lizard",
+  "summary": "Two scene pictures animated into one story, with the same characters in every scene.",
+  "kind": "story",
+  "engine": "Seedance 2.0 Mini",
+  "resolution": "720p",
+  "aspect": "9:16",
+  "duration": 10,
+  "scenes": [
+    {
+      "n": 1,
+      "duration": 5,
+      "prompt": "3D Pixar-style cartoon animation, bright friendly colors, expressive characters. Maintain the exact art style, characters, lighting and layout of the starting frame.\n\nAnimate this image for 5 seconds. Vertical 9:16 cinematic 3D animation.\n\nPreserve Dad, Chindu, Kiki, the lizard, hawk and environment exactly as shown.\n\nThe detached tail wriggles continuously on the ground.\n\nThe hawk stays beside the detached tail and remains completely distracted by it. The hawk looks down, follows the tail movement and tries to grab it.\n\nIMPORTANT: the hawk NEVER flies away and NEVER follows the real lizard.\n\nAt the same time, the real tailless lizard runs farther away toward the rocks in the background and reaches safety.\n\nDad points toward the action and says:\n\n“Some lizards drop their tails to distract predators… and ESCAPE!”\n\nTime Dad's word “ESCAPE!” exactly when the real lizard disappears safely behind the rocks.\n\nChindu and Kiki watch silently in amazement.\n\nCamera slowly cranes upward and backward, keeping the moving tail, distracted hawk and escaping lizard visible together.\n\nSFX: tail scraping sand, hawk wing movement, desert wind, lizard footsteps.\n\nMusic: cinematic discovery music rising toward “ESCAPE!”\n\nWarm golden desert sunlight, airborne dust, natural cinematic motion.\n\nOnly Dad speaks.\nNo narrator.\nNo female adult voice.\nNo other voices.\nNo captions.\nNo subtitles.\nNo text.\nNo blood.\nNo wounds.\nNo diagrams.\nNo arrows.\n\nThe hawk MUST remain with the detached tail until the final frame.\n\nNarration voice: a warm, sunny female narrator.\n\nPlayful, upbeat background music.\n\nNo text overlays, no logos, no watermarks."
+    },
+    {
+      "n": 2,
+      "duration": 5,
+      "prompt": "3D Pixar-style cartoon animation, bright friendly colors, expressive characters. Maintain the exact art style, characters, lighting and layout of the starting frame.\n\nAnimate this image for 5 seconds. Vertical 9:16 cinematic 3D animation.\n\nPreserve Dad, Chindu, Kiki, the lizard and sunset environment exactly as shown.\n\nThis scene takes place much later.\n\nThe lizard already has its replacement tail.\n\nDO NOT grow or transform the tail during the video.\n\nStart with the lizard standing proudly on the rock.\n\nCamera slowly moves around the lizard to clearly reveal its replacement tail. The replacement tail remains thicker, smoother and less patterned than the original.\n\nChindu notices the tail, points toward it and says excitedly:\n\n“It GREW BACK?!”\n\nDad smiles and answers:\n\n“Many can—but the new tail isn’t exactly the same.”\n\nKiki reacts silently with amazement.\n\nImmediately after Dad finishes the word “same,” the lizard suddenly runs quickly forward and passes very close beside the camera.\n\nThe camera quickly whip-pans to follow the running lizard.\n\nEND THE VIDEO DURING THE FAST CAMERA MOVEMENT.\n\nDo not let the camera stop after the lizard runs.\n\nDo not fade out.\n\nSFX: gentle desert wind, lizard claws on rock, quick footsteps and strong whoosh as the lizard passes camera.\n\nMusic: soft wonder music, then a quick energetic rise when the lizard runs.\n\nOnly Chindu and Dad speak.\n\nChindu is the older girl in BLUE star pajamas.\nKiki is the younger girl in PINK pajamas.\n\nKiki does NOT speak.\n\nNo narrator.\nNo adult female voice.\nNo additional children.\nNo hawk.\nNo predator.\nNo detached tail.\nNo captions.\nNo subtitles.\nNo text.\nNo magical effects.\nNo tail-growing animation.\nNo extra characters.\n\nNarration voice: a warm, sunny female narrator.\n\nPlayful, upbeat background music.\n\nNo text overlays, no logos, no watermarks."
+    }
+  ],
+  "assets": [
+    {
+      "file": "asset01.jpg",
+      "role": "scene",
+      "label": "Scene picture 1"
+    },
+    {
+      "file": "asset02.jpg",
+      "role": "scene",
+      "label": "Scene picture 2"
+    }
+  ],
+  "video": "clip.mp4",
+  "poster": "poster.jpg"
+}

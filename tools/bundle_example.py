@@ -139,6 +139,11 @@ def bundle(gen_dir: Path, out_root: Path, slug: str, title: str, summary: str = 
                     continue
                 assets.append({"file": name, "role": role, "label": label})
                 seen[digest] = assets[-1]
+        for label in {a["label"] for a in assets}:                  # several pictures with the same label -> "Scene picture 1", "… 2"
+            same = [a for a in assets if a["label"] == label]
+            if len(same) > 1:
+                for i, a in enumerate(same, 1):
+                    a["label"] = f"{label} {i}"
         (dest / "example.json").write_text(json.dumps({
             "id": slug, "title": title.strip(), "summary": summary.strip(), "kind": meta["kind"],
             "engine": ENGINE_LABELS.get(meta.get("tier"), meta.get("tier") or ""), "resolution": meta.get("resolution", ""),

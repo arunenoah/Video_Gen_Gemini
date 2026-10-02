@@ -1,0 +1,26 @@
+{
+  "id": "garden-makeover",
+  "title": "A garden makeover",
+  "summary": "A realistic before-and-after, animated from a single start picture.",
+  "kind": "story",
+  "engine": "Seedance 2.0 Mini",
+  "resolution": "720p",
+  "aspect": "9:16",
+  "duration": 10,
+  "scenes": [
+    {
+      "n": 1,
+      "duration": 10,
+      "prompt": "3D Pixar-style cartoon animation, bright friendly colors, expressive characters. Maintain the exact art style, characters, lighting and layout of the starting frame.\n\nCreate a 10-second vertical 9:16 ultra-photorealistic cinematic transformation video using the supplied Scene 3 start image as the EXACT reference.\n\nSTORY STAGE:\nSECOND TRANSFORMATION → WOW.\n\nThis is the final payoff. The restored but unfinished courtyard must transform into an extraordinary private Mediterranean luxury spa oasis.\n\nNO DIALOGUE. NO VOICEOVER.\nUse only satisfying environmental, water, construction and transformation SFX.\n\nCRITICAL:\nPreserve the EXACT circular sunken stone plunge pool, central stone feature, courtyard dimensions, walls, windows, ivy-covered architecture and camera direction.\n\nDo NOT replace the plunge pool with a different modern swimming pool.\n\n0.0–2.0 SEC — WATER TRANSFORMATION\n\nBegin immediately. No opening pause.\n\nCrystal-clear turquoise water rapidly flows into the EMPTY circular plunge pool from several existing water outlets.\n\nShow the water level visibly rising.\n\nThe water should physically interact with the stone basin, creating realistic ripples, reflections and splashes.\n\nAs water reaches the central stone feature, it activates as a gentle bubbling fountain.\n\nSFX: rushing water → splash → bubbling fountain.\n\n2.0–4.0 SEC — LANDSCAPE TRANSFORMATION\n\nWithout stopping the action, shift attention around the pool.\n\nRemaining messy courtyard edges become beautifully finished.\n\nLoose dirt clears away.\nStone paving becomes clean and polished.\nExisting greenery is professionally trimmed.\nElegant Mediterranean plants and flowering greenery fill selected planters.\n\nDo NOT completely replace the existing ivy.\nRefine it so the original courtyard remains recognizable.\n\nCamera makes a smooth sideways arc around the plunge pool.\n\n4.0–6.0 SEC — LUXURY LAYER\n\nPremium outdoor elements are installed in rapid but believable physical movements:\n\ntwo elegant lounge chairs slide into position;\na small luxury side table is placed;\nsoft cream cushions settle naturally;\nlarge terracotta planters become professionally arranged;\nsubtle decorative details complete the courtyard.\n\nKeep the plunge pool visible as the hero object.\n\nNo random object teleportation.\n\n6.0–8.0 SEC — ATMOSPHERE TRANSFORMATION\n\nLighting gradually transitions from late afternoon toward warm golden-hour evening.\n\nExisting wall lanterns illuminate sequentially.\n\nHidden warm architectural lights activate around the pool edge and plants.\n\nThe turquoise water catches the golden reflections.\n\nA SMALL amount of realistic warm steam begins rising from the plunge pool.\n\nThe courtyard should suddenly feel like a five-star private Mediterranean spa.\n\nSFX: subtle lighting clicks, bubbling water, gentle evening ambience.\n\n8.0–10.0 SEC — WOW\n\nThis is the biggest payoff.\n\nCamera smoothly pulls backward AND slightly upward, revealing the entire SAME courtyard.\n\nShow:\n\nthe glowing circular stone plunge pool,\ncrystal-clear turquoise water,\ngentle central fountain,\nsubtle steam,\nbeautiful preserved ivy,\nluxury lounge chairs,\nMediterranean plants,\nwarm architectural lighting,\nclean stone paving,\nand the original arched architecture.\n\nCreate a breathtaking luxury-resort hero shot.\n\nThe final 1.5–2 seconds must remain visually readable while the camera continues a very slow cinematic movement.\n\nThe viewer must clearly understand:\n\nTHIS IS THE SAME ABANDONED COURTYARD FROM THE BEGINNING.\n\nFINAL LOOK:\nHigh-end Mediterranean boutique hotel spa.\nWarm golden-hour/evening atmosphere.\nCinematic reflections.\nPremium but believable.\nPhotorealistic.\nNot fantasy.\n\nIMPORTANT NEGATIVE INSTRUCTIONS:\n\nDo NOT change the shape or size of the circular plunge pool.\nDo NOT remove the central stone feature.\nDo NOT create a rectangular swimming pool.\nDo NOT change the building.\nDo NOT change windows or doors.\nDo NOT create new floors/buildings.\nDo NOT add people.\nDo NOT add a giant pergola.\nDo NOT overcrowd the courtyard.\nDo NOT instantly jump to the finished result.\nDo NOT use magical flashes.\nDo NOT teleport everything simultaneously.\nDo NOT create dead frames.\nDo NOT finish the transformation before 8 seconds.\n\nEvery 1–2 seconds must introduce a new visible upgrade.\n\nThe strongest completed appearance MUST occur only during the final 2 seconds.\n\nNarration voice: a warm, sunny female narrator.\n\nPlayful, upbeat background music.\n\nNo text overlays, no logos, no watermarks."
+    }
+  ],
+  "assets": [
+    {
+      "file": "asset01.jpg",
+      "role": "scene",
+      "label": "Scene picture"
+    }
+  ],
+  "video": "clip.mp4",
+  "poster": "poster.jpg"
+}
