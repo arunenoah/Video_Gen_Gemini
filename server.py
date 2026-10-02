@@ -69,11 +69,23 @@ def build_allowed_hosts(port: int, public_hosts: list[str]) -> set[str]:
 ALLOWED_HOSTS = build_allowed_hosts(PORT, [])
 # Opt-in remote access: VIDEOGEN_BIND=0.0.0.0 VIDEOGEN_PUBLIC_HOST=<ip-or-domain>[,<another>]
 BIND_ADDR = os.environ.get("VIDEOGEN_BIND", "127.0.0.1")
-_public_hosts = [h.strip().lower() for h in os.environ.get("VIDEOGEN_PUBLIC_HOST", "").split(",") if h.strip()]
+def parse_public_hosts(raw: str, platform_host: str = "") -> list[str]:
+    """VIDEOGEN_PUBLIC_HOST → clean host names. Forgiving about the usual slips (pasted 'https://' or a trailing '/path');
+    also trusts the hostname the hosting platform itself injects (Render sets RENDER_EXTERNAL_HOSTNAME)."""
+    out: list[str] = []
+    for item in [*raw.split(","), platform_host]:
+        h = re.sub(r"^[a-z][a-z0-9+.-]*://", "", item.strip().lower()).split("/")[0].split("?")[0].strip()
+        if h and re.fullmatch(r"[a-z0-9.:\[\]-]{1,253}", h) and h not in out:      # a plain host[:port] — nothing else
+            out.append(h)
+    return out
+
+
+_public_hosts = parse_public_hosts(os.environ.get("VIDEOGEN_PUBLIC_HOST", ""), os.environ.get("RENDER_EXTERNAL_HOSTNAME", ""))
 ALLOWED_HOSTS = build_allowed_hosts(PORT, _public_hosts)         # comma-separated: LAN ip, public ip, domain…
 # Behind a reverse proxy (Render, Nginx…) every connection comes from the proxy, so rate limits must use the address the
 # proxy saw. Only enable this when the app is reachable ONLY through that proxy — the header is client-forgeable otherwise.
 TRUST_PROXY = os.environ.get("VIDEOGEN_TRUST_PROXY") == "1"
+_REJECTED_HOSTS: set[str] = set()
 try:
     PROXY_HOPS = max(1, int(os.environ.get("VIDEOGEN_PROXY_HOPS") or 1))     # trusted proxies in front of us
 except ValueError:
@@ -1389,6 +1401,10 @@ class Handler(SimpleHTTPRequestHandler):
         host = (self.headers.get("Host") or "").lower()
         if host in ALLOWED_HOSTS:
             return True
+        if len(_REJECTED_HOSTS) < 50 and host not in _REJECTED_HOSTS:     # once per distinct value: a misconfiguration
+            _REJECTED_HOSTS.add(host)                                      # shows up in the logs without letting bots flood them
+            print(f"Rejected Host header {host[:100]!r} — add it to VIDEOGEN_PUBLIC_HOST "
+                  f"(allowed now: {', '.join(sorted(h for h in ALLOWED_HOSTS if ':' not in h))})")
         self.send_error(403, "forbidden host")
         return False
 
@@ -1757,6 +1773,7 @@ if __name__ == "__main__":
             base = f"{'https' if os.environ.get('VIDEOGEN_TLS_CERT') else 'http'}://{first}:{PORT}"
         print(f"ADMIN SETUP (one-time link, 24 h): {base}/enroll/{token}")
     print("Sign-in: username + password + authenticator code (accounts in users.db)")
+    print(f"Public hosts accepted: {', '.join(_public_hosts) or '(none — only localhost)'}")
     print(f"Open → http://127.0.0.1:{PORT}/")
     httpd = ThreadingHTTPServer((BIND_ADDR, PORT), Handler)
     cert, key = os.environ.get("VIDEOGEN_TLS_CERT"), os.environ.get("VIDEOGEN_TLS_KEY")

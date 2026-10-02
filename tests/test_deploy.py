@@ -27,6 +27,29 @@ class FakeHandler:
     _client_ip = server.Handler._client_ip
 
 
+class PublicHostParsingTests(unittest.TestCase):
+    def test_should_forgive_the_usual_slips_when_pasting_a_host(self):
+        for raw in ("sparkgarden.onrender.com", "https://sparkgarden.onrender.com/", "  HTTPS://SparkGarden.onrender.com/login?x=1 ",
+                    "http://sparkgarden.onrender.com"):
+            self.assertEqual(server.parse_public_hosts(raw), ["sparkgarden.onrender.com"], raw)
+
+    def test_should_keep_several_hosts_dedupe_and_add_the_platform_host(self):
+        self.assertEqual(server.parse_public_hosts("a.example.com, 192.168.1.5 ,a.example.com", "app.onrender.com"),
+                         ["a.example.com", "192.168.1.5", "app.onrender.com"])
+        self.assertEqual(server.parse_public_hosts("", "app.onrender.com"), ["app.onrender.com"])
+
+    def test_should_drop_junk_instead_of_accepting_it(self):
+        self.assertEqual(server.parse_public_hosts("bad host, <script>, ,;rm -rf, ok.example.com"), ["ok.example.com"])
+        self.assertEqual(server.parse_public_hosts(""), [])
+        self.assertEqual(server.parse_public_hosts("x" * 400), [])
+
+    def test_should_not_let_a_parsed_host_widen_what_is_allowed(self):
+        hosts = server.build_allowed_hosts(10000, server.parse_public_hosts("https://sparkgarden.onrender.com/"))
+        self.assertIn("sparkgarden.onrender.com", hosts)
+        self.assertNotIn("evil.sparkgarden.onrender.com", hosts)
+        self.assertNotIn("sparkgarden.onrender.com.evil.example", hosts)
+
+
 class HostAndClientIpTests(unittest.TestCase):
     def test_should_accept_public_hosts_with_and_without_port_but_nothing_else(self):
         hosts = server.build_allowed_hosts(10000, ["app.example.com"])
@@ -60,6 +83,18 @@ class DeployHttpTests(LiveServerCase):
         for host in (None, "unknown.example"):
             r = self._raw("GET", "/healthz", host=host)
             self.assertEqual((r.status, r.body), (200, b"ok"))
+
+    def test_should_log_a_rejected_host_once_without_flooding(self):
+        import io
+        from contextlib import redirect_stdout
+        server._REJECTED_HOSTS.discard("misconfigured.example")
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            for _ in range(3):
+                self.assertEqual(self._raw("GET", "/login", host="misconfigured.example").status, 403)
+        logged = buf.getvalue()
+        self.assertEqual(logged.count("Rejected Host header 'misconfigured.example'"), 1)       # once, not three times
+        self.assertIn("VIDEOGEN_PUBLIC_HOST", logged)
 
     def test_should_not_answer_head_requests_for_any_file(self):
         for path in ("/users.db", "/server.py", "/config.json", "/ui/logo.png", "/ui/login-hero-v2.jpg", "/login", "/"):
