@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#177bb5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/ui/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/ui/icon-192.png">
 <title>SparkGarden</title>
 <link rel="icon" type="image/png" href="/ui/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,7 +46,21 @@
 <script src="/ui/vg-formats.js?v=1"></script>
 <script src="/ui/vg-lab-logic.js?v=2"></script>
 <script type="text/babel" src="/ui/vg-views-lab.jsx?v=4"></script>
-<script type="text/babel" src="/ui/vg-views-chat.jsx?v=3"></script>
+<script src="/ui/vg-aix-core.js?v=1"></script>
+<script src="/ui/vg-aix-sorter.js?v=1"></script>
+<script src="/ui/vg-aix-sabotage.js?v=1"></script>
+<script src="/ui/vg-aix-fib.js?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-shell.jsx?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-sorter.jsx?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-sabotage.jsx?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-fib.jsx?v=1"></script>
+<script src="/ui/vg-aix-engine.js?v=1"></script>
+<script src="/ui/vg-aix-study-logic.js?v=1"></script>
+<script src="/ui/vg-aix-studio-logic.js?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-game.jsx?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-study.jsx?v=1"></script>
+<script type="text/babel" src="/ui/vg-aix-studio.jsx?v=1"></script>
+<script type="text/babel" src="/ui/vg-views-chat.jsx?v=4"></script>
 
 <script type="text/babel">
 const { useState, useEffect, useRef } = React;
@@ -268,6 +287,10 @@ function VideoStudio({ embedded, injected, menuVisible, prefs, setPref }) {
   const [startPic, setStartPic] = useState(null);   // picture waiting to become scene 1's start image (sent from Pictures/Library)
 
   const [tierId, setTierId] = useState(() => vgDefaultTierId());
+  useEffect(() => {                                  // a kid's account may allow only some engines: never keep one they can't use
+    const ok = vgTiersForUser();
+    if (ok.length && !ok.some(t => t.id === tierId)) setTierId(vgDefaultTierId());
+  }, [tierId]);
   const [resId, setResId] = useState('720p');
   const [aspectId, setAspectId] = useState('16:9');
   const [refImages, setRefImages] = useState([]);   // character reference data-URLs (max 3)

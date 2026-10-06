@@ -131,6 +131,7 @@ class BrowserHelperTests(unittest.TestCase):
         code = "\n".join([block("const VG_DURATIONS_BY_TIER = {", "\n};"), "const VG_DEFAULT_DURATIONS = [4, 6, 8];",
                           block("const VG_TIERS = [", "\n];"),
                           block("function vgAllowedDurations", "\n}\n"), block("function vgSnapDuration", "\n}\n"),
+                          block("function vgAllowedEngines", "\n}\n"),
                           block("function vgTiersForUser", "\n}\n"), block("function vgDefaultTierId", "\n}\n")])
         script = f"global.window={{VG_USER:{{allowedDurations:{json.dumps(allowed)}}}}};\n{code}\n{body}"
         return json.loads(subprocess.run(["node", "-e", script], capture_output=True, text=True, check=True).stdout)

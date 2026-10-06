@@ -37,6 +37,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId
     <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: '1.55fr 1fr', gap: 26, alignItems: 'start' }}>
       <div style={{ display: 'grid', gap: 24 }}>
         {/* tiers / models */}
+        {vgShowEnginePicker() && (
         <section>
           <VGOverline style={{ marginBottom: 11 }}>Model & quality</VGOverline>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
@@ -55,6 +56,7 @@ function StyleView({ theme, scenes, tierId, setTierId, resId, setResId, aspectId
             })}
           </div>
         </section>
+        )}
 
         {/* resolution */}
         <section>

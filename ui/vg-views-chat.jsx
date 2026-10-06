@@ -732,6 +732,7 @@ function Sidebar({ theme, mode, setMode, convs, activeId, onNew, onSelect, onDel
         {modeBtn('library', 'grid', 'My Library')}
         {modeBtn('examples', 'star', 'Examples')}
         {modeBtn('lab', 'wand', 'Prompt Lab')}
+        {modeBtn('aix', 'cpu', 'AI Explorers')}
         {user.role === 'admin' && (
           <>
             <div style={{ height: 1, background: '#e8eaed', margin: '8px 6px' }} />
@@ -772,7 +773,7 @@ function AppShell({ theme, renderVideo }) {
   const [mode, setModeState] = useS(() => {
     try {
       const m = localStorage.getItem('vg_mode');
-      return ['chat', 'image', 'video', 'library', 'examples', 'lab'].includes(m) || (m === 'users' && user.role === 'admin') ? m : 'chat';   // 'users' is admin-only
+      return ['chat', 'image', 'video', 'library', 'examples', 'lab', 'aix'].includes(m) || (m === 'users' && user.role === 'admin') ? m : 'chat';   // 'users' is admin-only
     } catch (e) { return 'chat'; }
   });
   const [videoSeen, setVideoSeen] = useS(false);
@@ -879,6 +880,7 @@ function AppShell({ theme, renderVideo }) {
         )}
         {locked && (mode === 'chat' || mode === 'image' || mode === 'video') && <LockedPane theme={theme} menuVisible={!open || narrow} onLibrary={() => setMode('library')} />}
         {mode === 'lab' && <PromptLabPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
+        {mode === 'aix' && <AIExplorersPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
         {mode === 'examples' && <ExamplesPane key={viewKey} theme={theme} onUseScript={useScript} menuVisible={!open || narrow} />}
         {mode === 'library' && <LibraryPane key={viewKey} theme={theme} onUseImage={useImage} toast={toast} menuVisible={!open || narrow} />}
         {isConv && !locked && <ConversationView key={mode + viewKey} theme={theme} kind={mode} user={user}

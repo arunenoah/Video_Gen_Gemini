@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, unquote
 
 import veo
 import openrouter_video
+import gamespec
 import openrouter_chat
 import ark_video
 import auth
@@ -170,6 +171,17 @@ USER_DURATIONS = parse_user_durations(os.environ.get("VIDEOGEN_USER_DURATIONS"))
 def allowed_durations(user: dict) -> tuple[int, ...] | None:
     """The clip lengths this user may choose, or None for no limit (admins are never limited)."""
     return None if user["role"] == "admin" or not USER_DURATIONS else USER_DURATIONS
+
+
+def allowed_engines(user: dict) -> list[str] | None:
+    """Engine ids this user may use, so the page can hide the rest (None = no limit: admins and unrestricted accounts).
+    Display only: every request is still checked by `_engine_denied` on the server."""
+    if user["role"] == "admin":
+        return None
+    acc = auth.account(user["id"])
+    if not acc or not acc["engines"]:
+        return None
+    return [e for e in auth.ENGINE_IDS if e in acc["engines"]] or None
 
 
 def snap_duration(value, allowed) -> int:
@@ -592,6 +604,9 @@ PUBLIC_UI_FILES = {                                   # exact paths only — eve
     "/ui/parents-blocked.jpg": ("parents-blocked.jpg", "image/jpeg"),
     "/ui/parents-example.jpg": ("parents-example.jpg", "image/jpeg"),
     "/ui/parents-hero.webp": ("parents-hero.webp", "image/webp"),
+    "/ui/manifest.webmanifest": ("manifest.webmanifest", "application/manifest+json"),     # installable-app files (no service worker)
+    "/ui/icon-192.png": ("icon-192.png", "image/png"),
+    "/ui/icon-512.png": ("icon-512.png", "image/png"),
     **{f"/ui/parents-ic-{n}.png": (f"parents-ic-{n}.png", "image/png")
        for n in ("sprout", "chat", "palette", "bulb", "shield", "sliders", "lock", "pencil")},
 }      # exact paths only — everything else under /ui/ needs sign-in
@@ -922,6 +937,10 @@ class Handler(SimpleHTTPRequestHandler):
             return self._image()
         if self.path == "/api/story-review":
             return self._story_review()
+        if self.path == "/api/study":
+            return self._study()
+        if self.path == "/api/game-spec":
+            return self._game_spec()
         self.send_error(404)
 
     def do_DELETE(self):
@@ -1490,6 +1509,26 @@ class Handler(SimpleHTTPRequestHandler):
         if reserved:                       # 0 = admin / free model → nothing was held
             auth.settle(self.user["id"], reserved, auth.to_micro(actual_usd * PRICE_MULTIPLIER))
 
+    def _read_messages(self, payload: dict):
+        """Validated chat history [{role, content}] (1-12 turns, last from the user, <= 8000 chars) or None after a 400."""
+        raw = payload.get("messages")
+        if not isinstance(raw, list) or not 1 <= len(raw) <= 12:
+            self._json(400, {"error": "need 1-12 messages"})
+            return None
+        msgs, total = [], 0
+        for m in raw:
+            role = (m or {}).get("role") if isinstance(m, dict) else None
+            content = str(m.get("content", "")).strip() if isinstance(m, dict) else ""
+            if role not in ("user", "assistant") or not 1 <= len(content) <= 2000:
+                self._json(400, {"error": "each message needs a role (user/assistant) and 1-2000 characters"})
+                return None
+            total += len(content)
+            msgs.append({"role": role, "content": content})
+        if msgs[-1]["role"] != "user" or total > 8000:
+            self._json(400, {"error": "last message must be from the user (max 8000 characters in total)"})
+            return None
+        return msgs
+
     def _chat(self):
         """Kid-safe chat turn: guard every message → reserve → model → settle → scan the reply before returning it."""
         payload = self._json_body()
@@ -1498,19 +1537,9 @@ class Handler(SimpleHTTPRequestHandler):
         engine = str(payload.get("engine", "chat-deepseek"))
         if engine not in openrouter_chat.CHAT_MODELS:
             return self._json(400, {"error": "unknown chat model"})
-        raw = payload.get("messages")
-        if not isinstance(raw, list) or not 1 <= len(raw) <= 12:
-            return self._json(400, {"error": "need 1-12 messages"})
-        msgs, total = [], 0
-        for m in raw:
-            role = (m or {}).get("role") if isinstance(m, dict) else None
-            content = str(m.get("content", "")).strip() if isinstance(m, dict) else ""
-            if role not in ("user", "assistant") or not 1 <= len(content) <= 2000:
-                return self._json(400, {"error": "each message needs a role (user/assistant) and 1-2000 characters"})
-            total += len(content)
-            msgs.append({"role": role, "content": content})
-        if msgs[-1]["role"] != "user" or total > 8000:
-            return self._json(400, {"error": "last message must be from the user (max 8000 characters in total)"})
+        msgs = self._read_messages(payload)
+        if msgs is None:
+            return
         if self._engine_denied(engine):
             return
         for m in msgs:                      # history is client-supplied, so every turn is re-checked (verdicts cache)
@@ -1538,11 +1567,161 @@ class Handler(SimpleHTTPRequestHandler):
         if not text:
             return self._json(502, {"error": "Sunny didn't have an answer that time. Try asking another way!"})
         verdict = safety.check(text)
-        if not verdict.allowed:
+        if not verdict.allowed and not self._exempt(verdict):
             auth.record_violation(self.user, verdict.category or "other", "chat:output", text, strike=False)
             return self._json(200, {"reply": "Hmm, I can't share that one. Let's talk about something else — "
                                              "want a fun fact or a riddle?", "filtered": True})
         self._json(200, {"reply": text, "filtered": False})
+
+    def _ai_limit_hit(self, kind: str) -> bool:
+        """429 (and True) when the user has used their hourly Study Buddy / Game Studio calls."""
+        if not auth.ai_limited(self.user["id"], kind):
+            return False
+        self._json(429, {"error": "You've used lots of AI time for now — take a break and come back soon!"})
+        return True
+
+    def _study(self):
+        """Study Buddy turn (homework tutor or wonder mode). Same pipeline as _chat, but the system prompt is composed
+        from fixed server constants chosen by the validated grade / ladder / intent / mode enums."""
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+        engine = str(payload.get("engine", "chat-deepseek"))
+        if engine not in openrouter_chat.CHAT_MODELS:
+            return self._json(400, {"error": "unknown chat model"})
+        grade, intent = payload.get("grade", "g4-6"), payload.get("intent", "ask")
+        mode, ladder = payload.get("mode", "homework"), payload.get("ladder", 1)
+        if (not isinstance(grade, str) or grade not in openrouter_chat.STUDY_GRADES
+                or not isinstance(intent, str) or intent not in openrouter_chat.STUDY_INTENTS
+                or not isinstance(mode, str) or mode not in openrouter_chat.STUDY_MODES
+                or isinstance(ladder, bool) or not isinstance(ladder, int) or ladder not in openrouter_chat.LADDER_TEXT):
+            return self._json(400, {"error": "unknown study option"})
+        msgs = self._read_messages(payload)
+        if msgs is None or self._engine_denied(engine):
+            return
+        if payload.get("image") and not openrouter_chat.CHAT_MODELS[engine].get("vision"):
+            return self._json(400, {"error": "This helper can't look at pictures. Pick the one that says "
+                                             "'can look at pictures'."})
+        if self._ai_limit_hit("study"):
+            return
+        # History is client-supplied, so every turn is re-checked (verdicts cache) - but only the LAST turn can
+        # earn a strike. Older turns were vetted when they were sent; a stale one that now fails is refused
+        # without punishing the child again (otherwise one bad word + "Try again" suspends the account).
+        for i, m in enumerate(msgs):
+            if not self._guard(m["content"], "study", strike=i == len(msgs) - 1 and m["role"] == "user"):
+                return
+        image = self._take_image(payload["image"], "study") if payload.get("image") else None
+        if image is False:
+            return
+        system = openrouter_chat.study_system(grade, ladder, intent, mode)
+        reserved = self._reserve_sync(openrouter_chat.estimate_chat_cost(engine, msgs, has_image=image is not None,
+                                                                         system=system))
+        if reserved is None:
+            return
+        try:
+            text, cost = openrouter_chat.chat(engine, msgs, image=image, system=system)
+        except Exception as exc:
+            self._settle_sync(reserved, 0)
+            print(f"study error: {_redact(str(exc))[:200]}")
+            return self._json(502, {"error": "Sunny is taking a short nap. Please try again in a moment."})
+        self._settle_sync(reserved, cost)
+        self._log_usage("study", engine, cost, reserved)
+        if not text:
+            return self._json(502, {"error": "Sunny didn't have an answer that time. Try asking another way!"})
+        verdict = safety.check(text)
+        if not verdict.allowed and not self._exempt(verdict):
+            auth.record_violation(self.user, verdict.category or "other", "study:output", text, strike=False)
+            return self._json(200, {"reply": "Hmm, I can't share that one. Let's wonder about something else — "
+                                             "want a fun fact?", "filtered": True})
+        self._json(200, {"reply": text, "filtered": False})
+
+    def _game_spec(self):
+        """Game Studio: kid's idea → model → gamespec.validate_spec (or validate_ideas for kind 'ideas').
+        The raw model text is NEVER returned; only a validated, re-built object leaves this function."""
+        payload = self._json_body()
+        if payload is None:
+            return self._json(413, {"error": "request too large"})
+        engine = str(payload.get("engine", "chat-deepseek"))
+        if engine not in openrouter_chat.CHAT_MODELS:
+            return self._json(400, {"error": "unknown chat model"})
+        kind = payload.get("kind", "build")
+        if kind not in ("build", "ideas"):                  # `in` on a list/dict value is a TypeError only for unhashables
+            return self._json(400, {"error": "unknown kind"})
+        picks, raw_picks = {}, payload.get("picks")
+        if raw_picks is not None:
+            if not isinstance(raw_picks, dict):
+                return self._json(400, {"error": "picks must be an object"})
+            for k in ("hero", "goal", "world", "twist"):
+                v = raw_picks.get(k)
+                if v is None:
+                    continue
+                if not isinstance(v, str) or len(v.strip()) > 40:
+                    return self._json(400, {"error": "each pick must be text of at most 40 characters"})
+                if v.strip():
+                    picks[k] = v.strip()
+        req = {"kind": kind, "picks": picks}
+        if kind == "build":
+            template = payload.get("template")
+            idea, tweak = payload.get("idea"), payload.get("tweak")
+            if not isinstance(template, str) or (template not in gamespec.TEMPLATES and template != "auto"):
+                return self._json(400, {"error": "unknown game template"})
+            if not isinstance(idea, str) or not 3 <= len(idea.strip()) <= 300:
+                return self._json(400, {"error": "describe your game in 3-300 characters"})
+            if tweak is not None and (not isinstance(tweak, str) or not 3 <= len(tweak.strip()) <= 200):
+                return self._json(400, {"error": "describe the change in 3-200 characters"})
+            prev = payload.get("previous_spec")
+            if prev is not None:
+                prev, errs = gamespec.validate_spec(prev)
+                if prev is None:
+                    return self._json(400, {"error": "previous game was not valid"})
+            req.update(template=template, idea=idea.strip(), tweak=(tweak or "").strip(), previous_spec=prev)
+            texts = [req["idea"], req["tweak"]]
+            system, validate, max_tokens, temp = openrouter_chat.GAME_SYSTEM, gamespec.validate_spec, openrouter_chat.GAME_MAX_TOKENS, 0.8
+        else:
+            idea = payload.get("idea")
+            if idea is not None and (not isinstance(idea, str) or len(idea.strip()) > 300):
+                return self._json(400, {"error": "idea is too long"})
+            texts = [(idea or "").strip()]
+            req["idea"] = texts[0]                          # 'Surprise me' builds on what the child typed
+            system, validate, max_tokens, temp = openrouter_chat.IDEAS_SYSTEM, gamespec.validate_ideas, 600, 1.0
+        if self._engine_denied(engine):
+            return
+        if self._ai_limit_hit("game"):
+            return
+        for t in texts + [" / ".join(picks.values())]:      # every free-text string is guarded before any spend
+            if t and not self._guard(t, "game-spec"):
+                return
+        msgs = openrouter_chat.game_spec_messages(req)
+        clean, errors = None, []
+        for attempt in range(2):                            # one repair call at most
+            reserved = self._reserve_sync(openrouter_chat.estimate_chat_cost(engine, msgs, system=system, max_tokens=max_tokens))
+            if reserved is None:
+                return
+            try:
+                text, cost = openrouter_chat.chat(engine, msgs, system=system, max_tokens=max_tokens, temperature=temp)
+            except Exception as exc:
+                self._settle_sync(reserved, 0)
+                print(f"game-spec error: {_redact(str(exc))[:200]}")
+                return self._json(502, {"error": "The AI is taking a short nap. Please try again in a moment.", "retryable": True})
+            self._settle_sync(reserved, cost)
+            self._log_usage("game", engine, cost, reserved)
+            clean, errors = validate(gamespec.extract_json(text))
+            if clean is not None:
+                break
+            if attempt == 0:
+                msgs = msgs + [{"role": "assistant", "content": str(text)[:gamespec.MAX_JSON_CHARS]},
+                               {"role": "user", "content": "Your JSON failed these checks: " + "; ".join(errors)[:600]
+                                + ". Reply with the corrected JSON only."}]
+        if clean is None:
+            return self._json(502, {"error": "The AI's game didn't come out right. Try again, or pick a starter game!",
+                                    "retryable": True})
+        shown = gamespec.spec_texts(clean) if kind == "build" else "\n".join(clean)
+        verdict = safety.check(shown)
+        if not verdict.allowed and not self._exempt(verdict):
+            auth.record_violation(self.user, verdict.category or "other", "game-spec:output", shown, strike=False)
+            return self._json(200, {"filtered": True, "message": "Hmm, that idea went somewhere I can't follow. "
+                                                                 "Let's try a different one!"})
+        self._json(200, {"spec": clean, "filtered": False} if kind == "build" else {"ideas": clean, "filtered": False})
 
     def _story_review(self):
         """Prompt Lab "Ask Sunny": guard the story → reserve → review → settle → scan the reply before returning it."""
@@ -1571,7 +1750,7 @@ class Handler(SimpleHTTPRequestHandler):
         if not text:
             return self._json(502, {"error": "Sunny didn't have feedback that time. Try again!"})
         verdict = safety.check(text)
-        if not verdict.allowed:
+        if not verdict.allowed and not self._exempt(verdict):
             auth.record_violation(self.user, verdict.category or "other", "story-review:output", text, strike=False)
             return self._json(200, {"reply": "Hmm, I can't share my thoughts on that one. Try a different story!", "filtered": True})
         self._json(200, {"reply": text, "filtered": False})
@@ -1901,7 +2080,8 @@ class Handler(SimpleHTTPRequestHandler):
         page = (ROOT / "ui" / "VideoGen.html").read_text(encoding="utf-8")
         who = json.dumps({"username": self.user["username"], "role": self.user["role"], "priceMultiplier": PRICE_MULTIPLIER,
                           "videoRetentionHours": VIDEO_RETENTION_HOURS,
-                          "allowedDurations": list(allowed_durations(self.user) or []) or None})
+                          "allowedDurations": list(allowed_durations(self.user) or []) or None,
+                          "allowedEngines": allowed_engines(self.user)})
         data = page.replace("<head>", f"<head><script>window.VG_USER={who};</script>", 1).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1973,23 +2153,36 @@ class Handler(SimpleHTTPRequestHandler):
         auth.destroy_session(self._get_cookie(SESSION_COOKIE))
         self._redirect("/login", (self._cookie(SESSION_COOKIE, "", 0),))
 
-    def _guard(self, text: str, source: str) -> bool:
+    def _guard(self, text: str, source: str, strike: bool = True) -> bool:
         """Safety gate for user text — call BEFORE any spend or file write. Sends 422 and returns False if blocked.
 
         Blocks are logged (category + short excerpt) and counted as strikes; the 3rd strike in 24 h — or any
         sexual content involving minors — suspends a non-admin account. Self-harm gets a supportive message and
         no strike. The user only ever sees a generic message, never which rule matched."""
-        return self._enforce(safety.check(text), text, source)
+        return self._enforce(safety.check(text), text, source, strike)
 
-    def _enforce(self, verdict, logged_text: str, source: str) -> bool:
-        if verdict.allowed:
+    def _exempt(self, verdict) -> bool:
+        """True when an admin may skip this block: gentle categories only, never a checker outage (see safety.ADMIN_EXEMPT)."""
+        return ((self.user or {}).get("role") == "admin" and verdict.source != "error"
+                and verdict.category in safety.ADMIN_EXEMPT)
+
+    def _enforce(self, verdict, logged_text: str, source: str, strike: bool = True) -> bool:
+        if verdict.allowed or self._exempt(verdict):
             return True
         suspended = False
+        if verdict.category in safety.CHILD_PROTECTION:
+            logged_text = "[not kept]"                  # never store a child's address / phone / contact details
         if verdict.source != "error":
             suspended = auth.record_violation(
-                self.user, verdict.category, source, logged_text, strike=verdict.category != safety.SELF_HARM,
+                self.user, verdict.category, source, logged_text,
+                strike=strike and safety.strikes_for(verdict.category, source),
                 immediate=verdict.category in safety.ZERO_TOLERANCE)
-        self._json(422, {"error": safety.message_for(verdict, suspended), "blocked": True})
+        body = {"error": safety.message_for(verdict, suspended, source), "blocked": True}
+        if verdict.source == "error":
+            body["retryable"] = True                    # checker outage, not the child's words: the UI may offer Try again
+        elif verdict.category in (safety.SELF_HARM, safety.UNSAFE_CONTACT):
+            body["care"] = True                         # lets the UI show a calm support card instead of an error
+        self._json(422, body)
         return False
 
     def _take_image(self, obj, source: str):
@@ -2043,7 +2236,7 @@ class Handler(SimpleHTTPRequestHandler):
     def _guard_output(self, text: str, source: str) -> bool:
         """Local-filter scan of AI-written text before the user sees it. Logged without a strike (not the user's doing)."""
         category = safety.local_check(text)
-        if not category:
+        if not category or self._exempt(safety.Verdict(False, category, "local")):
             return True
         auth.record_violation(self.user, category, source + ":output", text, strike=False)
         self._json(502, {"error": "We couldn't write that one. Let's try a different idea!"})
@@ -2095,7 +2288,8 @@ class Handler(SimpleHTTPRequestHandler):
                          "spentToday": acc["spent_today"] / auth.MICRO, "engines": acc["engines"],
                          "time": auth.time_status(self.user["id"]), "priceMultiplier": PRICE_MULTIPLIER,
                          "videoRetentionHours": VIDEO_RETENTION_HOURS,
-                         "allowedDurations": list(allowed_durations(self.user) or []) or None})
+                         "allowedDurations": list(allowed_durations(self.user) or []) or None,
+                          "allowedEngines": allowed_engines(self.user)})
 
     def _new_id(self, prompt: str) -> str:
         """make_id + record the current user as owner (story clips '<id>-cNN' inherit it)."""

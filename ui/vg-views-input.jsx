@@ -87,6 +87,7 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, startPic,
           </div>
 
           {/* engine / model picker — board mode skips the Style tab, so choose it here */}
+          {vgShowEnginePicker() && (
           <div>
             <VGOverline style={{ marginBottom: 10 }}>Which engine builds it?</VGOverline>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10 }}>
@@ -109,6 +110,7 @@ function ScriptView({ theme, mode, setMode, script, setScript, scenes, startPic,
               })}
             </div>
           </div>
+          )}
 
           {/* resolution + aspect (resolution capped per engine) */}
           <div style={{ display: 'flex', gap: 22, flexWrap: 'wrap' }}>

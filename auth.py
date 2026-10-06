@@ -197,6 +197,18 @@ def upload_limited(uid: int) -> bool:
     return False
 
 
+STUDY_MAX, GAME_MAX, AI_WINDOW = 60, 20, 3600   # Study Buddy / Game Studio model calls per user per hour (each one costs money)
+
+
+def ai_limited(uid: int, kind: str) -> bool:
+    """True when the user used up their hourly 'study' or 'game' calls; otherwise counts this one. Unknown kind → limited."""
+    cap = {"study": STUDY_MAX, "game": GAME_MAX}.get(kind)
+    if cap is None or _limited(("ai", kind, uid), cap, AI_WINDOW):
+        return True
+    _fail(("ai", kind, uid))
+    return False
+
+
 def _throttled(ip: str, username: str) -> bool:
     return _limited(("ip", ip), IP_MAX_FAILS, IP_WINDOW) or _limited(("user", username), USER_MAX_FAILS, USER_WINDOW)
 
@@ -245,11 +257,16 @@ def set_disabled(uid: int, disabled: bool, reason: str = "") -> None:
             c.execute("UPDATE safety_events SET reviewed=1 WHERE user_id=?", (uid,))
 
 
+KID_TEXT_SOURCES = ("study", "game-spec")
+
+
 def record_violation(user: dict, category: str, source: str, text: str, strike: bool = True,
                      immediate: bool = False) -> bool:
     """Log a blocked input. Suspends a (non-admin) user at STRIKE_LIMIT strikes in 24 h, or at once if
     `immediate`. Returns True if the account was suspended by this event."""
     excerpt = re.sub(r"[\x00-\x1f\x7f]+", " ", text or "")[:80]
+    if source.split(":")[0] in KID_TEXT_SOURCES:      # kid-authored study/game text is never kept, only a fingerprint
+        excerpt = "[not kept] " + hashlib.sha256((text or "").encode()).hexdigest()[:12]
     now = int(time.time())
     with _tx() as c:
         c.execute("INSERT INTO safety_events(user_id, category, source, excerpt, strike, created) VALUES(?,?,?,?,?,?)",

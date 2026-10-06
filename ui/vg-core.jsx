@@ -97,13 +97,21 @@ function vgSnapDuration(d) {
   const a = vgAllowedDurations();
   return a ? a.reduce((best, x) => (Math.abs(x - d) < Math.abs(best - d) ? x : best), a[0]) : d;
 }
-/** Engines that can make EVERY allowed length — the only ones a limited user is offered (admins see all). */
-function vgTiersForUser() {
-  const a = vgAllowedDurations();
-  return a ? VG_TIERS.filter(t => a.every(d => (VG_DURATIONS_BY_TIER[t.api] || VG_DEFAULT_DURATIONS).includes(d))) : VG_TIERS;
+/** Engine ids the admin allowed for this account (the server sends VG_USER.allowedEngines; null = no limit, e.g. admins). */
+function vgAllowedEngines() {
+  const a = window.VG_USER && window.VG_USER.allowedEngines;
+  return Array.isArray(a) && a.length ? a : null;
 }
+/** Engines this user may use: allowed on the account AND able to make EVERY allowed length (admins see all). */
+function vgTiersForUser() {
+  const d = vgAllowedDurations(), e = vgAllowedEngines();
+  return VG_TIERS.filter(t => (!e || e.includes(t.api)) && (!d || d.every(n => (VG_DURATIONS_BY_TIER[t.api] || VG_DEFAULT_DURATIONS).includes(n))));
+}
+/** Only show the engine picker when there is a real choice; a single allowed engine is used silently. */
+function vgShowEnginePicker() { return vgTiersForUser().length > 1; }
 function vgDefaultTierId() {
   const tiers = vgTiersForUser();
+  if (!tiers.length) return 'lite';                       // nothing allowed: the server will say so when they try
   return tiers.some(t => t.id === 'lite') ? 'lite' : (tiers.find(t => t.id === 'seedance-mini') || tiers[0]).id;
 }
 
@@ -408,6 +416,6 @@ function vgReadImage(file) {
 
 Object.assign(window, {
   VG_THEMES, SCENE_ACCENTS, VG_TIERS, VG_RESOLUTIONS, VG_ASPECTS, VG_STYLES, VG_VOICES, VG_MUSIC,
-  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, vgExampleScript, vgPriceLevel, vgAllowedDurations, vgSnapDuration, vgTiersForUser, vgDefaultTierId, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
+  VG_TEMPLATES, VG_DEFAULT_SCRIPT, VG_PRICING, vgRate, vgMult, vgBallpark, vgExpiry, vgRetentionNote, vgExampleScript, vgPriceLevel, vgAllowedDurations, vgSnapDuration, vgAllowedEngines, vgTiersForUser, vgShowEnginePicker, vgDefaultTierId, VG_DEFAULT_DURATIONS, VG_DURATIONS_UNION, vgParseScript, vgMoney, vgReadImage,
   VGLogo, VGButton, VGCard, VGPill, VGOverline, VGThumb,
 });
