@@ -40,7 +40,7 @@ class WiringTests(unittest.TestCase):
         self.assertEqual(ORDER.index("vg-aix-voxel.js"), ORDER.index("vg-aix-blocks.js") + 1)
         self.assertEqual(ORDER.index("vg-aix-fp.jsx"), ORDER.index("vg-aix-blocks.jsx") + 1)
         self.assertIn('<script src="/ui/vg-aix-voxel.js?v=1"></script>', HTML)
-        self.assertIn('<script type="text/babel" src="/ui/vg-aix-fp.jsx?v=1"></script>', HTML)
+        self.assertIn('<script type="text/babel" src="/ui/vg-aix-fp.jsx?v=2"></script>', HTML)
 
     def test_should_bump_changed_phase_one_files_to_at_least_v2_so_browsers_drop_stale_code(self):
         for f in ("vg-aix-engine.js", "vg-aix-blocks.js", "vg-aix-blocks.jsx", "vg-aix-game.jsx", "vg-aix-studio.jsx", "vg-aix-studio-logic.js"):
@@ -135,6 +135,46 @@ class TouchTests(unittest.TestCase):
     def test_should_have_keyboard_controls_for_every_action(self):
         for needle in ("'f'", "'g'", "'e'", "'q'", "' '", "'shift'", "'1'"):
             self.assertIn(needle, FP)
+
+
+class ShortcutAndMapViewTests(unittest.TestCase):
+    def test_should_handle_v_m_b_only_while_playing_and_never_while_typing_or_with_modifiers(self):
+        for needle in ("k === 'v'", "k === 'm'", "k === 'b'", "setView(false)", "setView(!c.map)"):
+            self.assertIn(needle, FP)
+        handler = FP[FP.index("const onKeyDown"):FP.index("const onKeyUp")]
+        self.assertLess(handler.index("typing(e) || e.ctrlKey || e.metaKey || e.altKey"), handler.index("k === 'v'"))
+        self.assertLess(handler.index("if (!c.active) return;"), handler.index("k === 'v'"))   # inactive (ready / paused) ignores them
+
+    def test_should_show_a_hint_bar_and_matching_footer(self):
+        for needle in ("['Space', 'Jump']", "['F', 'Break']", "['G', 'Place']", "['V', 'My view']", "['M', 'Map view']", "['B', 'Big']", "Keyboard shortcuts",
+                       "V is My view, M is Map view, B is Big", "Your hero from Game Studio is your character."):
+            self.assertIn(needle, FP)
+        self.assertIn("{!touch && (", FP)             # hidden for touch players, who have the buttons
+
+    def test_should_give_every_shortcut_a_labelled_button_with_pressed_state(self):
+        for needle in ('aria-label="My view, first person (V)" aria-pressed={!mapView}', 'aria-label="Map view, from above (M)" aria-pressed={mapView}', "aria-pressed={full}"):
+            self.assertIn(needle, FP)
+        self.assertIn("minWidth: TAP, minHeight: TAP", FP)   # glassBtn, used by the new buttons
+
+    def test_should_turn_off_looking_building_hand_and_crosshair_in_map_view(self):
+        for needle in ("c.active && !c.map", "Switch to My view to build", "hand.visible = mv < 0.02", "{!mapView && <div"):
+            self.assertIn(needle, FP)
+
+    def test_should_ease_the_map_camera_unless_reduced_motion_and_restore_the_look(self):
+        self.assertRegex(FP, r"mapT = motion \? mapT \+ \(goal - mapT\)")
+        self.assertIn("camera.rotation.y = player.yaw; camera.rotation.x = player.pitch + (MAP_PITCH - player.pitch) * mv", FP)
+
+    def test_should_build_the_hero_avatar_from_the_validated_sprite_and_dispose_it(self):
+        for needle in ("function heroLook(", "function mixHex(", "function paintFace(", "function makeAvatar(", "HEX.test(c)", "THREE.NearestFilter",
+                       "track(own.texs, new THREE.CanvasTexture(faceCv))", "track(own.geoms, new THREE.CircleGeometry", "scene.add(avatar.group)"):
+            self.assertIn(needle, FP)
+        self.assertNotIn("new THREE.BoxGeometry", FP[FP.index("function makeAvatar("):FP.index("// ---------- small UI pieces")])   # shares the tracked unit box
+
+    def test_should_not_name_characters_after_other_companies_games(self):
+        self.assertIsNone(re.search(r"steve|noob|creeper|minecraft", FP, re.I))
+
+    def test_should_not_add_a_name_tag_that_could_carry_markup(self):
+        self.assertIsNone(re.search(r"fillText|innerHTML", FP))
 
 
 @unittest.skipUnless(NODE, "node not installed")

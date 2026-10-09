@@ -5,6 +5,7 @@
    The pixel-art block textures are painted at runtime by makeAtlas below: our own art, no image files, nothing downloaded.
    The world is data (a spec), never code. All text is React text; nothing from the spec is used as markup, a URL or code.
    Controls: mouse (pointer lock, drag-look fallback) + keyboard, or touch (joystick, look-drag, big buttons).
+   Shortcuts while playing: Space jump, F break, G place, V My view, M Map view (from above, north is where you were facing), B Big. Your Game Studio hero is a blocky character seen in Map view.
    Safety and care: friendly message instead of a blank screen when WebGL or three.js is missing, pauses when the tab is hidden,
    devicePixelRatio capped at 2, at most 2 chunk rebuilds per frame, and every renderer / geometry / material / texture / listener /
    timer is released on unmount. Respects prefers-reduced-motion (no head bob, no cloud drift).
@@ -18,6 +19,9 @@
   const DAY_MS = 360000;                            // one day, matches AIXVoxel.timeOfDay
   const MAX_RENDER_CHUNKS = 5;                      // render distance, in chunks
   const CHUNKS_PER_FRAME = 2;
+  const MAP_H = 26;                                 // map view: camera height above the player, in blocks
+  const MAP_PITCH = -1.22;                          // about -70 degrees: a steep look down, like a game map
+  const MAP_BACK = MAP_H / Math.tan(-MAP_PITCH);    // how far behind the player the camera sits so the player stays centred
   const SAVE_DELAY = 600;
   const sfx = (n) => { try { if (typeof window.aixSfx === 'function') window.aixSfx(n); } catch (e) { /* sound is optional */ } };
   const reduced = () => { try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; } };
@@ -141,9 +145,69 @@
     return { group: g, legs: legs, head: head };
   }
 
+  // ---------- my hero as a blocky character ----------
+  const toHex = (n) => '#' + (n & 0xffffff).toString(16).padStart(6, '0');
+  /** Blend colour a toward colour b by t (0..1). Anything that is not #rrggbb falls back to the default hero orange. */
+  function mixHex(a, b, t) {
+    const x = hexNum(a, 0xff7a59), y = hexNum(b, 0xff7a59), k = clamp(t, 0, 1);
+    const ch = (sh) => Math.round(((x >> sh) & 255) + ((((y >> sh) & 255) - ((x >> sh) & 255)) * k));
+    return toHex((ch(16) << 16) | (ch(8) << 8) | ch(0));
+  }
+  /**
+   * What the character looks like, read defensively from spec.hero (already validated, checked again here).
+   * @returns {{color:string, hair:string, sprite:?{palette:string[], rows:string[]}}}
+   */
+  function heroLook(hero) {
+    const h = hero && typeof hero === 'object' ? hero : {};
+    const color = typeof h.color === 'string' && HEX.test(h.color) ? h.color : '#ff7a59';
+    let sprite = null;
+    const sp = h.sprite;
+    if (sp && Array.isArray(sp.palette) && Array.isArray(sp.rows) && sp.palette.length >= 1 && sp.palette.length <= 6 && sp.rows.length === 8
+      && sp.palette.every((c) => typeof c === 'string' && HEX.test(c))
+      && sp.rows.every((r) => typeof r === 'string' && r.length === 8 && r.split('').every((d) => d >= '0' && d <= '9' && Number(d) < sp.palette.length))) {
+      sprite = { palette: sp.palette, rows: sp.rows };
+    }
+    let hair = '#6b4a2f';                                     // the sprite's most common colour becomes the hair and the rest of the head
+    if (sprite) {
+      const count = sprite.palette.map(() => 0);
+      sprite.rows.forEach((r) => { for (let i = 0; i < 8; i++) count[Number(r[i])]++; });
+      hair = sprite.palette[count.indexOf(Math.max.apply(null, count))];
+    }
+    return { color: color, hair: hair, sprite: sprite };
+  }
+  /** Paint the 8 x 8 front of the head: the kid's own sprite, or our friendly default face. */
+  function paintFace(cv, look) {
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    if (look.sprite) {
+      for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) { ctx.fillStyle = look.sprite.palette[Number(look.sprite.rows[y][x])]; ctx.fillRect(x, y, 1, 1); }
+      return;
+    }
+    ctx.fillStyle = look.hair; ctx.fillRect(0, 0, 8, 8);
+    ctx.fillStyle = '#f6d3b0'; ctx.fillRect(0, 2, 8, 6);
+    ctx.fillStyle = '#14202b'; ctx.fillRect(2, 3, 1, 2); ctx.fillRect(5, 3, 1, 2);
+    ctx.fillStyle = '#ff9ea8'; ctx.fillRect(1, 5, 1, 1); ctx.fillRect(6, 5, 1, 1);
+    ctx.fillStyle = '#b5443a'; ctx.fillRect(2, 5, 1, 1); ctx.fillRect(5, 5, 1, 1); ctx.fillRect(3, 6, 2, 1);
+  }
+  /** Build the character (1.8 blocks tall, 0.6 wide) from boxes. Forward is +z. Returns { group, upper, legs[2], arms[2] }. */
+  function makeAvatar(THREE, unit, mat, faceMat, look) {
+    const g = new THREE.Group(), upper = new THREE.Group(), legs = [], arms = [];
+    const box = (parent, w, h, d, x, y, z, m) => { const mesh = new THREE.Mesh(unit, m); mesh.scale.set(w, h, d); mesh.position.set(x, y, z); parent.add(mesh); return mesh; };
+    const hairM = mat(look.hair), armM = mat(mixHex(look.color, '#ffffff', 0.25)), legM = mat(mixHex(look.color, '#000000', 0.35));
+    [-1, 1].forEach((q) => {
+      const leg = new THREE.Group(); leg.position.set(q * 0.09, 0.65, 0); box(leg, 0.17, 0.65, 0.2, 0, -0.325, 0, legM); g.add(leg); legs.push(leg);
+      const arm = new THREE.Group(); arm.position.set(q * 0.24, 1.25, 0); box(arm, 0.12, 0.6, 0.14, 0, -0.28, 0, armM); upper.add(arm); arms.push(arm);
+    });
+    box(upper, 0.36, 0.65, 0.2, 0, 0.975, 0, mat(look.color));
+    box(upper, 0.5, 0.5, 0.5, 0, 1.55, 0, [hairM, hairM, hairM, hairM, faceMat, hairM]);   // +x -x +y -y +z -z: the face is on +z
+    g.add(upper);
+    return { group: g, upper: upper, legs: legs, arms: arms };
+  }
+
   // ---------- small UI pieces ----------
   const btnStyle = (accent, extra) => Object.assign({ minWidth: TAP, minHeight: TAP, padding: '0 18px', borderRadius: 14, border: 'none', background: accent, color: '#fff', fontSize: 16, fontWeight: 800, cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' }, extra || {});
   const ghostStyle = { minHeight: TAP, padding: '0 20px', borderRadius: 999, border: `1.5px solid ${LINE}`, background: '#fff', color: INK, fontSize: 15, fontWeight: 800, cursor: 'pointer' };
+  const HINTS = [['Space', 'Jump'], ['F', 'Break'], ['G', 'Place'], ['V', 'My view'], ['M', 'Map view'], ['B', 'Big']];
   const glassBtn = { minWidth: TAP, minHeight: TAP, padding: '0 14px', borderRadius: 999, border: '2px solid rgba(255,255,255,.7)', background: 'rgba(20,32,43,.5)', color: '#fff', fontSize: 15, fontWeight: 800, cursor: 'pointer', userSelect: 'none', WebkitUserSelect: 'none' };
 
   /** Friendly card shown when 3D cannot start (never a blank screen). */
@@ -187,9 +251,10 @@
     const [note, setNote] = React.useState('');
     const [under, setUnder] = React.useState(false);
     const [full, setFull] = React.useState(false);
+    const [mapView, setMapView] = React.useState(false);        // false = my view (first person), true = map view (from above)
 
     const boxRef = React.useRef(null), canvasRef = React.useRef(null), stickRef = React.useRef(null), knobRef = React.useRef(null);
-    const ctl = React.useRef({ f: 0, b: 0, l: 0, r: 0, jump: false, sprint: false, brk: false, put: false, lookX: 0, lookY: 0, jx: 0, jy: 0, active: false, locked: false, noLock: false, sel: 0 });
+    const ctl = React.useRef({ f: 0, b: 0, l: 0, r: 0, jump: false, sprint: false, brk: false, put: false, lookX: 0, lookY: 0, jx: 0, jy: 0, active: false, locked: false, noLock: false, sel: 0, map: false });
     const api = React.useRef({});                                // functions the effect hands back to the buttons
     const R = React.useRef({});
     R.current = { onPlotChange: onPlotChange, onEnd: onEnd, phase: phase, touch: touch };
@@ -212,6 +277,7 @@
       const canvas = canvasRef.current, box = boxRef.current;
       if (!canvas || !box) return undefined;
       const c = ctl.current;
+      c.map = false; setMapView(false);
       const own = { geoms: [], mats: [], texs: [] };               // everything we must dispose
       const track = (arr, o) => { arr.push(o); return o; };
       const motion = !reduced();
@@ -336,6 +402,16 @@
       const sparkMat = track(own.mats, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 }));
       const gemMeshes = gems.map((g) => { const m = new THREE.Mesh(gemGeo, gemMat); m.scale.y = 1.35; const s = new THREE.Mesh(gemGeo, sparkMat); s.scale.set(0.35, 0.5, 0.35); m.add(s); m.userData.key = g.x + ',' + g.y + ',' + g.z; m.userData.px = g.x + 0.5; m.userData.py = g.z + 0.8; m.userData.pz = g.y + 0.5; m.userData.spark = s; scene.add(m); return m; });
 
+      // ----- my hero as a blocky character (seen from the map view; hidden in first person) -----
+      const look = heroLook(spec && spec.hero);
+      const faceCv = document.createElement('canvas'); faceCv.width = faceCv.height = 8; paintFace(faceCv, look);
+      const faceTex = track(own.texs, new THREE.CanvasTexture(faceCv));
+      faceTex.magFilter = THREE.NearestFilter; faceTex.minFilter = THREE.NearestFilter; faceTex.generateMipmaps = false;
+      const avatar = makeAvatar(THREE, unit, lambert, track(own.mats, new THREE.MeshBasicMaterial({ map: faceTex })), look);
+      const shadow = new THREE.Mesh(track(own.geoms, new THREE.CircleGeometry(0.55, 12)), track(own.mats, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 })));
+      shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.03; avatar.group.add(shadow);   // a soft blob under the feet
+      avatar.group.visible = false; scene.add(avatar.group);
+
       // ----- selection outline, cracks, debris -----
       const edgeGeo = track(own.geoms, new THREE.EdgesGeometry(new THREE.BoxGeometry(1.012, 1.012, 1.012)));
       const outline = new THREE.LineSegments(edgeGeo, track(own.mats, new THREE.LineBasicMaterial({ color: 0x14202b, transparent: true, opacity: 0.85 })));
@@ -407,6 +483,9 @@
       const typing = (e) => { const t = e.target && e.target.tagName; return t === 'INPUT' || t === 'TEXTAREA' || t === 'SELECT' || (e.target && e.target.isContentEditable); };
       const cycle = (d) => { const n = hotbar.length || 1; const next = (c.sel + d + n) % n; c.sel = next; setSel(next); sfx('tick'); };
       api.current.cycle = cycle;
+      /** Switch between my view (first person) and map view (from above). Building is off in map view. */
+      const setView = (map) => { if (c.map === map) return; c.map = map; setMapView(map); if (map) { c.brk = false; c.put = false; } sfx('tick'); };
+      api.current.setView = setView;
       const onKeyDown = (e) => {
         if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
         const k = String(e.key).toLowerCase();
@@ -416,6 +495,9 @@
         if (k === 'shift') { c.sprint = true; return; }
         if (k >= '1' && k <= '9') { const i = Number(k) - 1; if (i < hotbar.length) { c.sel = i; setSel(i); } return; }
         if (!c.active) return;
+        if (k === 'v') { setView(false); return; }
+        if (k === 'm') { if (!e.repeat) setView(!c.map); return; }
+        if (k === 'b') { if (!e.repeat && api.current.fullscreen) api.current.fullscreen(); return; }
         if (k === 'f' || k === 'enter') { if (e.target && e.target.tagName === 'BUTTON') return; e.preventDefault(); c.brk = true; }
         else if (k === 'g') { c.put = true; }
         else if (k === 'e' || k === 'tab') { e.preventDefault(); cycle(1); }
@@ -469,6 +551,7 @@
 
       // ----- the frame loop -----
       let tod = V.timeOfDay(0), last = 0, clock = 0, hitNow = null, crackKey = '', crackT = 0, placeCd = 0, bob = 0, hudKey = '', wasUnder = false, domeT = 1e9, fov = 72, ended = false;
+      let mapT = 0, mapNoteCd = 0, avFace = player.yaw + Math.PI, avPhase = 0, avAmp = 0;   // map-view blend (0 = my view, 1 = map), note timer, avatar heading / walk cycle
       const t0 = DAY_MS * 0.1;                                    // start a little after sunrise
       const eye = { x: 0, y: 0, z: 0 }, dir = { x: 0, y: 0, z: 0 };
       const input = { mx: 0, mz: 0, jump: false, yawDelta: 0, pitchDelta: 0, sprint: false };
@@ -506,7 +589,8 @@
         fwd += -c.jy; str += c.jx;
         input.mz = clamp(fwd, -1, 1); input.mx = clamp(str, -1, 1);
         input.jump = c.jump; input.sprint = c.sprint;
-        input.yawDelta = c.active ? -c.lookX * 0.0024 : 0; input.pitchDelta = c.active ? -c.lookY * 0.0024 : 0;
+        const look3 = c.active && !c.map;                           // mouse and drag look are off in map view
+        input.yawDelta = look3 ? -c.lookX * 0.0024 : 0; input.pitchDelta = look3 ? -c.lookY * 0.0024 : 0;
         c.lookX = 0; c.lookY = 0;
         if (!c.active) { input.mx = 0; input.mz = 0; input.jump = false; input.yawDelta = 0; input.pitchDelta = 0; }
         player = V.physics(player, input, world, dtMs) || player;
@@ -517,18 +601,29 @@
         const bobY = moving && motion ? Math.sin(bob) * 0.04 : 0;
         eye.x = player.x; eye.y = player.y; eye.z = player.z + EYE + bobY;
         lookDir(player.yaw, player.pitch, dir);
-        camera.position.set(eye.x, eye.z, eye.y);
-        camera.rotation.y = player.yaw; camera.rotation.x = player.pitch;
+        // ease between my view and map view (no easing when the kid prefers reduced motion)
+        const goal = c.map ? 1 : 0;
+        mapT = motion ? mapT + (goal - mapT) * (1 - Math.exp(-dtMs / 120)) : goal;
+        if (Math.abs(goal - mapT) < 0.004) mapT = goal;
+        const mv = mapT * mapT * (3 - 2 * mapT);
+        // map camera: MAP_H above the player, looking down, yaw kept as it was so up on screen is forward
+        const fx = -Math.sin(player.yaw), fy = -Math.cos(player.yaw);
+        camera.position.set(eye.x + (player.x - fx * MAP_BACK - eye.x) * mv, eye.z + (player.z + MAP_H - eye.z) * mv, eye.y + (player.y - fy * MAP_BACK - eye.y) * mv);
+        camera.rotation.y = player.yaw; camera.rotation.x = player.pitch + (MAP_PITCH - player.pitch) * mv;
+        hand.visible = mv < 0.02;
         const wantFov = 72 + (c.sprint && moving ? 8 : 0);
         if (Math.abs(wantFov - fov) > 0.2) { fov += (wantFov - fov) * 0.15; camera.fov = fov; camera.updateProjectionMatrix(); }
 
         // water tint + fog
-        const inWater = isWater(V.get(world, Math.floor(eye.x), Math.floor(eye.y), Math.floor(eye.z)));
-        if (inWater !== wasUnder) { wasUnder = inWater; setUnder(inWater); scene.fog.near = inWater ? 0.5 : 24; scene.fog.far = inWater ? 18 : MAX_RENDER_CHUNKS * CH; }
+        const inWater = mv < 0.5 && isWater(V.get(world, Math.floor(eye.x), Math.floor(eye.y), Math.floor(eye.z)));
+        if (inWater !== wasUnder) { wasUnder = inWater; setUnder(inWater); }
+        scene.fog.near = inWater ? 0.5 : 24 + 20 * mv; scene.fog.far = inWater ? 18 : MAX_RENDER_CHUNKS * CH + 140 * mv;   // map view sees much further
 
         // what am I looking at
         hitNow = null;
-        if (c.active) {
+        mapNoteCd = Math.max(0, mapNoteCd - dtMs);
+        if (c.active && c.map && (c.brk || c.put) && mapNoteCd === 0) { mapNoteCd = 2600; say('Switch to My view to build.'); }
+        if (c.active && !c.map) {
           const h = V.raycast(world, eye, dir, REACH);
           if (h && !isWater(h.id)) hitNow = h;
         }
@@ -573,6 +668,19 @@
           m.head.rotation.x = walking ? 0 : Math.sin(clock / 700 + i) * 0.12;
         }
 
+        // my character: faces the way it walks, swings arms and legs, bobs when still
+        avatar.group.visible = mv > 0.15;
+        if (avatar.group.visible) {
+          const spd = Math.sqrt(fin0(player.vx) * fin0(player.vx) + fin0(player.vy) * fin0(player.vy)), walking = c.active && spd > 0.4 && player.onGround;
+          if (spd > 0.4) { let d = Math.atan2(fin0(player.vx), fin0(player.vy)) - avFace; d = Math.atan2(Math.sin(d), Math.cos(d)); avFace += d * 0.25; }
+          if (walking) avPhase += dtMs * 0.012 * (c.sprint ? 1.4 : 1);
+          avAmp += ((walking && motion ? 0.8 : 0) - avAmp) * 0.2;
+          const sw = Math.sin(avPhase) * avAmp;
+          avatar.group.position.set(player.x, player.z, player.y); avatar.group.rotation.y = avFace;
+          avatar.legs[0].rotation.x = sw; avatar.legs[1].rotation.x = -sw; avatar.arms[0].rotation.x = -sw; avatar.arms[1].rotation.x = sw;
+          avatar.upper.position.y = motion ? Math.sin(clock / 450) * 0.015 * (1 - avAmp) : 0;
+        }
+
         // gems
         if (gems.length) {
           const got = V.collect(player, gems);
@@ -592,6 +700,7 @@
           const m = gemMeshes[i]; if (!m.visible) continue;
           const bobG = motion ? Math.sin(clock / 400 + i) * 0.1 : 0;
           m.position.set(m.userData.px, m.userData.py + bobG, m.userData.pz);
+          m.scale.set(1 + 1.2 * mv, 1.35 * (1 + 1.2 * mv), 1 + 1.2 * mv);   // bigger from far above so they stay easy to spot
           if (motion) { m.rotation.y = clock / 500 + i; m.userData.spark.rotation.y = -clock / 300; }
         }
 
@@ -696,10 +805,10 @@
           <canvas ref={canvasRef} aria-label={`${(spec && spec.title) || 'Block world'}. A 3D world you can walk around in and build.`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
           {under && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, background: 'rgba(40,110,200,.35)', pointerEvents: 'none' }} />}
 
-          {/* crosshair */}
-          <div aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 22, height: 22, marginLeft: -11, marginTop: -11, pointerEvents: 'none', mixBlendMode: 'difference' }}>
+          {/* crosshair (not in map view) */}
+          {!mapView && <div aria-hidden="true" style={{ position: 'absolute', left: '50%', top: '50%', width: 22, height: 22, marginLeft: -11, marginTop: -11, pointerEvents: 'none', mixBlendMode: 'difference' }}>
             <div style={{ position: 'absolute', left: 10, top: 0, width: 2, height: 22, background: '#fff' }} /><div style={{ position: 'absolute', left: 0, top: 10, width: 22, height: 2, background: '#fff' }} />
-          </div>
+          </div>}
 
           {/* top bar */}
           <div style={{ position: 'absolute', left: 10, right: 10, top: 10, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'space-between', pointerEvents: 'none', zIndex: 10 }}>
@@ -707,8 +816,10 @@
               {hud.total > 0 && <span role="status" style={{ padding: '6px 12px', borderRadius: 999, background: 'rgba(20,32,43,.55)', color: '#fff', fontSize: 15, fontWeight: 800 }}>{hud.got} of {hud.total} {goodName}</span>}
               {saved && <span role="status" style={{ padding: '6px 12px', borderRadius: 999, background: 'rgba(47,160,90,.85)', color: '#fff', fontSize: 14, fontWeight: 800 }}>Plot saved</span>}
             </div>
-            <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto' }}>
-              <button type="button" aria-pressed={full} onClick={() => api.current.fullscreen && api.current.fullscreen()} style={glassBtn}>{full ? 'Small' : 'Big'}</button>
+            <div style={{ display: 'flex', gap: 8, pointerEvents: 'auto', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button type="button" aria-label="My view, first person (V)" aria-pressed={!mapView} onClick={() => api.current.setView && api.current.setView(false)} style={Object.assign({}, glassBtn, !mapView ? { background: 'rgba(20,32,43,.85)' } : null)}>My view</button>
+              <button type="button" aria-label="Map view, from above (M)" aria-pressed={mapView} onClick={() => api.current.setView && api.current.setView(true)} style={Object.assign({}, glassBtn, mapView ? { background: 'rgba(20,32,43,.85)' } : null)}>Map view</button>
+              <button type="button" aria-label={full ? 'Small screen (B)' : 'Big screen (B)'} aria-pressed={full} onClick={() => api.current.fullscreen && api.current.fullscreen()} style={glassBtn}>{full ? 'Small' : 'Big'}</button>
               <button type="button" onClick={exit} style={glassBtn}>Back</button>
             </div>
           </div>
@@ -735,17 +846,28 @@
             </>
           )}
 
+          {/* shortcut hints (keyboard players only; touch players have the buttons) */}
+          {!touch && (
+            <div role="group" aria-label="Keyboard shortcuts" style={{ position: 'absolute', left: 8, right: 8, bottom: 70, display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', pointerEvents: 'none', zIndex: 9 }}>
+              {HINTS.map((h) => (
+                <span key={h[0]} style={{ padding: '3px 9px', borderRadius: 999, background: 'rgba(20,32,43,.5)', color: '#fff', fontSize: 12, fontWeight: 700 }}>
+                  <kbd style={{ fontFamily: 'inherit', fontWeight: 800, padding: '0 5px', marginRight: 5, borderRadius: 5, background: 'rgba(255,255,255,.25)' }}>{h[0]}</kbd>{h[1]}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* hotbar */}
           <div role="group" aria-label="Blocks to build with" style={{ position: 'absolute', left: 8, right: 8, bottom: 8, display: 'flex', gap: 3, justifyContent: 'center', overflowX: 'auto', padding: 4, borderRadius: 12, background: 'rgba(20,32,43,.45)', zIndex: 9, maxWidth: 'max-content', margin: '0 auto' }}>
             {hotbar.map(hbBtn)}
           </div>
 
-          {phase === 'ready' && overlay('Explore your world!', (touch ? 'Left thumb walks, right thumb looks around. Tap Break and Place to change the world.' : 'Click to start. WASD walks, Space jumps, mouse looks. Left click breaks, right click places, 1 to 9 picks a block.') + ' ' + (hud.total > 0 ? `Find all the ${goodName}!` : ''), <>{goBtn('Start', () => api.current.start && api.current.start())}{backBtn}</>)}
+          {phase === 'ready' && overlay('Explore your world!', (touch ? 'Left thumb walks, right thumb looks around. Tap Break and Place to change the world.' : 'Click to start. WASD walks, Space jumps, mouse looks. Left click breaks, right click places, 1 to 9 picks a block.') + ' ' + (hud.total > 0 ? `Find all the ${goodName}! ` : '') + 'Your hero from Game Studio is your character. ' + (touch ? 'Tap Map view to see it.' : 'Press M to see it.'), <>{goBtn('Start', () => api.current.start && api.current.start())}{backBtn}</>)}
           {phase === 'paused' && overlay('Paused', 'Take your time. Your world waits for you.', <>{goBtn('Keep exploring', () => api.current.keepGoing && api.current.keepGoing())}{backBtn}</>)}
           {phase === 'won' && overlay('You found them all!', `Every ${goodName} is yours. Your world is still here to explore.`, <>{goBtn('Keep exploring', () => api.current.keepGoing && api.current.keepGoing())}{backBtn}</>)}
         </div>
         <div style={{ textAlign: 'center', fontSize: 12.5, color: MUTE, marginTop: 10, fontWeight: 600 }}>
-          Blocks you add or break on your 12 by 12 plot are saved. Building anywhere else is just for fun and goes away when you leave. Keys: F breaks, G places, E or Q changes block.
+          Blocks you add or break on your 12 by 12 plot are saved. Building anywhere else is just for fun and goes away when you leave. Keys: Space jumps, F breaks, G places, E or Q changes block, V is My view, M is Map view, B is Big.
         </div>
       </div>
     );
