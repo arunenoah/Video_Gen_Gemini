@@ -175,11 +175,11 @@
   }
 
   // ======================================================================
-  function GameStudio({ onExit, onAward, onExplore, theme: themeProp }) {
+  function GameStudio({ onExit, onAward, onExplore, theme: themeProp, launch }) {
     const theme = themeProp || { primary: '#2563eb', primaryLight: '#dbe7ff', tint: '#eff6ff' };
     const explore = (k, v) => { try { if (typeof onExplore === 'function') onExplore(k, v); } catch (e) { /* the shell's problem */ } };
     const [view, setView] = React.useState('dream');            // dream | play | shelf
-    const [template, setTemplate] = React.useState(L.AUTO);   // 'auto' = let the AI choose the game type
+    const [template, setTemplate] = React.useState(launch === 'blocks' ? 'blocks' : L.AUTO);   // 'auto' = let the AI choose the game type
     const [mixSeed] = React.useState(() => Math.floor(Math.random() * 1e6));   // rotates the example pools per visit
     const [idea, setIdea] = React.useState('');
     const [picks, setPicks] = React.useState({});
@@ -228,6 +228,7 @@
       setPlayKey((k) => k + 1); setView('play');
     }
     const startStarter = (t) => { const tt = t || (template !== L.AUTO && template) || 'catcher'; setTemplate(tt); setFail(null); setNote(''); setGameId(null); showSpec(E.defaultSpec(tt), 'Starter game', null, true); explore('templates', tt); };
+    React.useEffect(() => { if (launch === 'blocks') startStarter('blocks'); }, []);   // sidebar / Explorers shortcut: straight into the block-world starter
 
     /** Shows a failed call: care and blocked messages are calm and never retryable; the rest may offer a retry. */
     function failWith(status, data) {

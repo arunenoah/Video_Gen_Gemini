@@ -42,9 +42,9 @@ class WiringTests(unittest.TestCase):
         self.assertIn('<script src="/ui/vg-aix-voxel.js?v=1"></script>', HTML)
         self.assertIn('<script type="text/babel" src="/ui/vg-aix-fp.jsx?v=1"></script>', HTML)
 
-    def test_should_bump_changed_phase_one_files_to_v2_so_browsers_drop_stale_code(self):
+    def test_should_bump_changed_phase_one_files_to_at_least_v2_so_browsers_drop_stale_code(self):
         for f in ("vg-aix-engine.js", "vg-aix-blocks.js", "vg-aix-blocks.jsx", "vg-aix-game.jsx", "vg-aix-studio.jsx", "vg-aix-studio-logic.js"):
-            self.assertEqual(VERSION[f], "2", f)
+            self.assertGreaterEqual(int(VERSION[f]), 2, f)   # later edits bump again, never back to v1
 
     def test_should_export_the_explore_view_and_mount_it_from_the_blocks_player(self):
         self.assertIn("window.AIX_FP = { ExploreView: ExploreView }", FP)

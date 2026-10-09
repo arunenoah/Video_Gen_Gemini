@@ -193,3 +193,21 @@ class ShellStudioTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BlockBuilderShortcutTests(unittest.TestCase):
+    """Block Builder is reachable from the sidebar and from the AI Explorers page (both open the block-world starter)."""
+
+    def test_should_have_a_sidebar_button_and_mount_it_with_the_blocks_launch(self):
+        self.assertRegex(CHAT, r"modeBtn\('blocks', '(\w+)', 'Block Builder'\)")
+        icon = re.search(r"modeBtn\('blocks', '([\w-]+)'", CHAT).group(1)
+        self.assertIn(f"case '{icon}'", (UI / "vg-icons.jsx").read_text())
+        self.assertRegex(CHAT, r"\[[^\]]*'aix', 'blocks'[^\]]*\]\.includes\(m\)")
+        self.assertIn('launch="blocks"', CHAT)
+
+    def test_should_show_a_block_builder_tile_and_pass_launch_to_the_studio(self):
+        shell = (UI / "vg-aix-shell.jsx").read_text()
+        self.assertIn("<AixBlocksCard theme={theme} onOpen={() => openStudio('studio', 'blocks')} />", shell)
+        self.assertIn("launch={view.launch}", shell)
+        studio = (UI / "vg-aix-studio.jsx").read_text()
+        self.assertIn("if (launch === 'blocks') startStarter('blocks')", studio)

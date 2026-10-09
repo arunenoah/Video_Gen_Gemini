@@ -414,6 +414,25 @@ function AixStudioCard({ studio, theme, done, onOpen }) {
   );
 }
 
+// Block Builder shortcut: opens Game Studio straight into the block-world starter (the studio itself earns the badge).
+function AixBlocksCard({ theme, onOpen }) {
+  return (
+    <button className="aix-btn aix-a-rise" onClick={onOpen} aria-label="Block Builder. Build a block world, then walk around inside it."
+      style={{ boxSizing: 'border-box', width: '100%', gridColumn: '1 / -1', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 14, padding: '18px 18px', minHeight: 96, borderRadius: 24,
+               border: `2px solid ${theme.primary}`, background: theme.tint || '#fff', cursor: 'pointer', boxShadow: '0 6px 0 ' + (theme.primaryLight || '#e3f2fd') }}>
+      <svg width="52" height="52" viewBox="0 0 52 52" aria-hidden="true" style={{ flexShrink: 0 }}>
+        <path d="M26 6 L45 16 L26 26 L7 16Z" fill={AIX.leaf} stroke={theme.primary} strokeWidth="3" strokeLinejoin="round" />
+        <path d="M7 16 V35 L26 46 V26Z" fill="#fff" stroke={theme.primary} strokeWidth="3" strokeLinejoin="round" />
+        <path d="M45 16 V35 L26 46 V26Z" fill={AIX.sun} stroke={theme.primary} strokeWidth="3" strokeLinejoin="round" />
+      </svg>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 20, fontWeight: 800, letterSpacing: '-0.02em', color: AIX.ink }}>Block Builder</span>
+        <span style={{ display: 'block', fontSize: 14.5, color: AIX.mute, marginTop: 3, lineHeight: 1.4 }}>Build a block world, then walk around inside it</span>
+      </span>
+    </button>
+  );
+}
+
 // ---- grown-up gate: shown once before either AI studio, because what a child types is sent to an AI service ----
 const AIX_CONSENT_KEY = 'sg-aix-grownup-v1';
 function AixGrownUpGate({ theme, onOk, onBack }) {
@@ -439,12 +458,12 @@ function AixGrownUpGate({ theme, onOk, onBack }) {
 
 /**
  * The AI Explorers tab. Views: map (home) -> play -> reward, plus the dress-up box.
- * @param {{theme:Object, menuVisible:boolean}} props
+ * @param {{theme:Object, menuVisible:boolean, launch?:string}} props launch 'blocks' opens Game Studio straight into the Block Builder starter (sidebar shortcut)
  */
-function AIExplorersPane({ theme, menuVisible }) {
+function AIExplorersPane({ theme, menuVisible, launch }) {
   const C = window.AIXCore;
   const [progress, setProgress] = React.useState(() => { try { return C.loadProgress(window.localStorage); } catch (e) { return C.emptyProgress(); } });
-  const [view, setView] = React.useState({ name: 'map' });          // map | dress | play {id, seed} | reward {id, stars, isNew} | studio {id}
+  const [view, setView] = React.useState(launch === 'blocks' ? { name: 'studio', id: 'studio', launch: 'blocks' } : { name: 'map' });   // map | dress | play {id, seed} | reward {id, stars, isNew} | studio {id, launch?}
   const finished = React.useRef(false);                              // a game may call onDone only once per play
   const narrow = useAixNarrow();
   const [notice, setNotice] = React.useState('');                    // "new part found" message shown inside a studio
@@ -471,7 +490,7 @@ function AIExplorersPane({ theme, menuVisible }) {
     setProgress(next);
     if (fresh.length) { const part = C.partOf(fresh[0]); setNotice(part ? `New part: ${part.name}! Bolt is wearing it.` : ''); window.aixSfx('win'); }
   };
-  const openStudio = (id) => { setNotice(''); setView({ name: 'studio', id }); window.aixSfx('pop'); };
+  const openStudio = (id, launchKind) => { setNotice(''); setView(launchKind === 'blocks' ? { name: 'studio', id, launch: 'blocks' } : { name: 'studio', id }); window.aixSfx('pop'); };
   // Studio callbacks: ignore anything that is not a known studio id / explore key (the C.* functions validate again).
   const onStudioAward = (studioId) => { if (C.studioOf(studioId)) commit(p => C.award(p, studioId, 0)); };
   const onStudioExplore = (key, value) => commit(p => C.explore(p, key, value));
@@ -513,7 +532,7 @@ function AIExplorersPane({ theme, menuVisible }) {
     body = !consent ? <AixGrownUpGate theme={theme} onOk={giveConsent} onBack={toMap} /> : typeof Studio === 'function' && studio ? (
       <div style={{ maxWidth: 980, margin: '0 auto' }}>
         {notice && <div role="status" className="aix-a-pop" style={{ margin: '0 0 12px', padding: '12px 16px', borderRadius: 16, background: AIX.paper, border: `1.5px solid ${AIX.sun}`, fontWeight: 800, color: AIX.ink }}>{notice}</div>}
-        <AixBoundary onExit={toMap}><Studio theme={theme} onExit={toMap} onAward={onStudioAward} onExplore={onStudioExplore} /></AixBoundary>
+        <AixBoundary onExit={toMap}><Studio theme={theme} onExit={toMap} onAward={onStudioAward} onExplore={onStudioExplore} launch={view.launch} /></AixBoundary>
       </div>
     ) : (
       <AixFrame title={studio ? studio.title : 'Studio'} theme={theme} onExit={toMap} muted={progress.muted} onToggleMute={toggleMute}><AixFallback onExit={toMap} /></AixFrame>
@@ -549,6 +568,7 @@ function AIExplorersPane({ theme, menuVisible }) {
         <div style={{ ...AIX_EYEBROW, margin: '0 0 10px' }}>Make and wonder with a real AI</div>
         <div className="aix-studios" style={{ marginBottom: 30 }}>
           {C.STUDIOS.map(st => <AixStudioCard key={st.id} studio={st} theme={theme} done={!!progress.done[st.id]} onOpen={openStudio} />)}
+          <AixBlocksCard theme={theme} onOpen={() => openStudio('studio', 'blocks')} />
         </div>
         <div style={{ ...AIX_EYEBROW, margin: '0 0 6px' }}>The garden path</div>
         <nav aria-label="Garden path of stations" style={{ display: 'flex', flexDirection: 'column', padding: '4px 0 10px' }}>
