@@ -17,7 +17,7 @@
     if (typeof require === 'function') { try { return require('./vg-aix-engine.js'); } catch (e) { /* fall through */ } }
     return null;
   }
-  const TEMPLATES = ['catcher', 'runner', 'maze', 'shooter', 'quiz'];
+  const TEMPLATES = ['catcher', 'runner', 'maze', 'shooter', 'quiz', 'blocks'];
 
   // ---------- chips (client constants, no AI) ----------
   const AUTO = 'auto';                        // "let the AI choose the game type" (server accepts it too)
@@ -27,6 +27,7 @@
     { id: 'maze', label: 'Maze', hint: 'Find the way through twisty walls' },
     { id: 'shooter', label: 'Pop it', hint: 'Aim and pop the baddies' },
     { id: 'quiz', label: 'Quiz', hint: 'Answer brainy questions' },
+    { id: 'blocks', label: 'Build a world', hint: 'Build a block world, then explore it' },
   ];
   // Pools are bigger than what is shown; pickSome() rotates them so every kid does not get the same three jokes.
   const HERO_POOL = ['a sleepy dragon', 'a tiny robot', 'a brave jellyfish', 'a dancing cloud', 'a space hamster', 'a shy volcano',
@@ -65,6 +66,13 @@
     { id: 'fewerlives', label: 'Fewer lives', text: 'Give the hero fewer lives for a bigger challenge' },
     { id: 'colours', label: 'Different colours', text: 'Change the colours to something totally different' },
     { id: 'story', label: 'Change the story', text: 'Change the story words to something new and funny' },
+  ];
+  // Extra tweaks that only make sense for a Block Builder world (terrain + landmarks); shown when spec.template is 'blocks'.
+  const BLOCK_TWEAK_CHIPS = [
+    { id: 'castle', label: 'Add a castle', text: 'Add a castle on the building plot' },
+    { id: 'desert', label: 'Make it a desert', text: 'Make the world a sunny desert' },
+    { id: 'pond', label: 'Add a pond', text: 'Add a pond with water next to the build' },
+    { id: 'snowy', label: 'Snowy mountains', text: 'Make the world snowy with snowy mountains' },
   ];
   // "Fix" buttons map to fixed tweak texts.
   const FIX_BUTTONS = [
@@ -195,7 +203,7 @@
 
   /** The tweak text for a chip / fix / twist / AI-asked idea. Unknown id -> null. */
   function tweakText(group, id) {
-    const list = group === 'twist' ? TWISTS : group === 'fix' ? FIX_BUTTONS : TWEAK_CHIPS;
+    const list = group === 'twist' ? TWISTS : group === 'fix' ? FIX_BUTTONS : group === 'blocks' ? BLOCK_TWEAK_CHIPS : TWEAK_CHIPS;
     const hit = lookup(list, id);
     return hit ? hit.text : null;
   }
@@ -292,6 +300,37 @@
     return v ? { n: v.n, words: v.words, spec: JSON.parse(JSON.stringify(v.spec)) } : null;
   }
 
+  /**
+   * Version list after the kid edits blocks by hand: repeated edits fold into ONE "You built it" entry instead of
+   * flooding the time machine (max 5 versions). Other entries are never touched.
+   */
+  function touchVersion(list, spec, words) {
+    const cur = Array.isArray(list) ? list : [];
+    const last = cur[cur.length - 1];
+    if (last && last.words === cleanText(words, 80)) return cur.slice(0, -1).concat([{ n: last.n, spec: JSON.parse(JSON.stringify(spec)), words: last.words }]);
+    return addVersion(cur, spec, words);
+  }
+
+  // ---------- Block Builder undo / redo (snapshots of the whole world state, newest last, at most 30) ----------
+  const BLOCK_HISTORY_MAX = 30;
+  const emptyHistory = () => ({ past: [], future: [] });
+  /** Record `snap` (the state BEFORE an edit). A new edit clears redo. Immutable. */
+  const histPush = (h, snap) => ({ past: ((h && h.past) || []).concat([snap]).slice(-BLOCK_HISTORY_MAX), future: [] });
+  /** @returns {{h:Object, snap:*}|null} step back: `cur` goes to redo, the previous snapshot comes back. Nothing to undo -> null. */
+  function histUndo(h, cur) {
+    const past = (h && h.past) || [];
+    if (!past.length) return null;
+    return { snap: past[past.length - 1], h: { past: past.slice(0, -1), future: (((h && h.future) || []).concat([cur])).slice(-BLOCK_HISTORY_MAX) } };
+  }
+  /** @returns {{h:Object, snap:*}|null} step forward again. */
+  function histRedo(h, cur) {
+    const fut = (h && h.future) || [];
+    if (!fut.length) return null;
+    return { snap: fut[fut.length - 1], h: { past: (((h && h.past) || []).concat([cur])).slice(-BLOCK_HISTORY_MAX), future: fut.slice(0, -1) } };
+  }
+  /** True when the spec is small enough for the Creator shelf (the same cap cleanEntry enforces). */
+  const fitsShelf = (spec) => { try { return JSON.stringify(spec).length <= MAX_GAME_BYTES; } catch (e) { return false; } };
+
   // ---------- Creator shelf (localStorage text in/out; caller owns try/catch around the actual storage) ----------
   const newId = (seed) => Math.abs(Math.floor(Number.isFinite(seed) ? seed : Date.now())).toString(36).slice(-8).padStart(4, '0');
 
@@ -343,10 +382,10 @@
   }
 
   const api = {
-    LIMITS, SAVE_KEY, MAX_GAMES, MAX_GAME_BYTES, MAX_VERSIONS, TEMPLATE_CHIPS, HERO_CHIPS, WORLD_CHIPS, GOAL_CHIPS, IDEA_EXAMPLES, TWISTS, TWEAK_CHIPS, FIX_BUTTONS, REFLECTIONS, PAINT,
+    LIMITS, SAVE_KEY, MAX_GAMES, MAX_GAME_BYTES, MAX_VERSIONS, TEMPLATE_CHIPS, HERO_CHIPS, WORLD_CHIPS, GOAL_CHIPS, IDEA_EXAMPLES, TWISTS, TWEAK_CHIPS, BLOCK_TWEAK_CHIPS, FIX_BUTTONS, REFLECTIONS, PAINT,
     cleanPicks, failInfo, buildSpecRequest, buildIdeasRequest, readIdeas, sparks, appendSpark, mixIdeas, twistById, shuffleTwists, tweakText, ideaToTweak, wordCount,
     applyOverrides, emptyGrid, paintCell, paintMirror, clearGrid, isBlank, pushUndo, undo, spritePalette, toSprite, fromSprite, applySprite, carryProvenance, pickSome, AUTO, HERO_POOL, IDEA_POOL,
-    addVersion, getVersion, parseShelf, serializeShelf, saveGame, removeGame, makeItMine,
+    addVersion, getVersion, touchVersion, BLOCK_HISTORY_MAX, emptyHistory, histPush, histUndo, histRedo, fitsShelf, parseShelf, serializeShelf, saveGame, removeGame, makeItMine,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.AIXStudioLogic = api;
 })(typeof window !== 'undefined' ? window : globalThis);

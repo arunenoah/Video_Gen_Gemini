@@ -9,8 +9,8 @@ UI = ROOT / "ui"
 HTML = (UI / "VideoGen.html").read_text()
 CHAT = (UI / "vg-views-chat.jsx").read_text()
 GAMES = ["sorter", "sabotage", "fib"]
-NEW_PLAIN = ["vg-aix-engine.js", "vg-aix-study-logic.js", "vg-aix-studio-logic.js"]
-NEW_JSX = ["vg-aix-game.jsx", "vg-aix-study.jsx", "vg-aix-studio.jsx"]
+NEW_PLAIN = ["vg-aix-engine.js", "vg-aix-blocks.js", "vg-aix-voxel.js", "vg-aix-study-logic.js", "vg-aix-studio-logic.js"]
+NEW_JSX = ["vg-aix-game.jsx", "vg-aix-blocks.jsx", "vg-aix-fp.jsx", "vg-aix-study.jsx", "vg-aix-studio.jsx"]
 MANIFEST = UI / "manifest.webmanifest"
 # the only network calls an aix file may make (always through the shared vgPost helper)
 ALLOWED_POSTS = {"/api/study", "/api/game-spec"}
@@ -64,6 +64,38 @@ class WiringTests(unittest.TestCase):
         for name in ["AIExplorersPane", "AixBolt", "AixConfetti", "AixFrame"]:
             self.assertIn(name, exports)
         self.assertIn("window.aixSfx = aixSfx", src)
+
+
+class BlockBuilderWiringTests(unittest.TestCase):
+    BLOCKS = (UI / "vg-aix-blocks.jsx").read_text()
+    GAME = (UI / "vg-aix-game.jsx").read_text()
+
+    def test_should_load_blocks_engine_after_game_engine_and_player_after_game_player(self):
+        srcs = re.findall(r'<script[^>]*src="/ui/([^"?]+)\?v=\d+"', HTML)
+        self.assertEqual(srcs.index("vg-aix-blocks.js"), srcs.index("vg-aix-engine.js") + 1)
+        self.assertEqual(srcs.index("vg-aix-blocks.jsx"), srcs.index("vg-aix-game.jsx") + 1)
+        self.assertEqual(srcs.index("vg-aix-voxel.js"), srcs.index("vg-aix-blocks.js") + 1)
+        self.assertEqual(srcs.index("vg-aix-fp.jsx"), srcs.index("vg-aix-blocks.jsx") + 1)
+        self.assertIn('<script src="/ui/vg-aix-blocks.js?v=2"></script>', HTML)
+        self.assertIn('<script type="text/babel" src="/ui/vg-aix-blocks.jsx?v=2"></script>', HTML)
+
+    def test_should_register_the_blocks_player_and_dispatch_to_it_from_the_game_player(self):
+        self.assertIn("window.AIX_BLOCKS = { BlocksPlayer", self.BLOCKS)
+        self.assertRegex(self.GAME, r"spec\.template === 'blocks'[\s\S]{0,200}AIX_BLOCKS")
+        self.assertIn("window.AixGamePlayer = AixGamePlayer", self.GAME)
+
+    def test_should_respect_reduced_motion_clean_up_and_label_the_canvas(self):
+        self.assertIn("prefers-reduced-motion", self.BLOCKS)
+        for needle in ("cancelAnimationFrame", "removeEventListener('keydown'", "clearTimeout", "Bk.describe(", "aria-label"):
+            self.assertIn(needle, self.BLOCKS)
+
+    def test_should_keep_touch_targets_at_least_44px(self):
+        self.assertRegex(self.BLOCKS, r"const TAP = (4[4-9]|[5-9]\d)\b")
+
+    def test_should_only_use_the_engine_api_the_contract_promises(self):
+        used = set(re.findall(r"\bBk\.(\w+)", self.BLOCKS))
+        contract = {"SIZE", "MAX_LAYERS", "ALPHABET", "MATERIALS", "starterBuild", "heightAt", "create", "step", "edit", "toSpec", "project", "pick", "describe"}
+        self.assertLessEqual(used, contract)
 
 
 class SecurityTests(unittest.TestCase):

@@ -205,6 +205,10 @@
     const [cooling, setCooling] = React.useState(false);      // brief rest after a care message
     const [breakNote, setBreakNote] = React.useState(false);
     const lastTweak = React.useRef('');
+    const playKeyRef = React.useRef(0);                         // newest Player key: a world edit from an older Player is stale
+    playKeyRef.current = playKey;
+    const shelfRef = React.useRef(shelf);
+    shelfRef.current = shelf;
     const started = React.useRef(Date.now());
     const awarded = React.useRef(false), alive = React.useRef(true), token = React.useRef(0), tweakRef = React.useRef(null), ideaRef = React.useRef(null);
     React.useEffect(() => () => { alive.current = false; }, []);
@@ -317,7 +321,26 @@
       setDiff({ words: 'Going back to version ' + n, lines: E.friendlyDiff(spec, ok.spec) });
       setSpec(ok.spec); setOv(null); setResult(null); setReflect(null); setPlayKey((k) => k + 1);
     }
+    /**
+     * The Block Builder reports the kid's hand-built world (debounced). Keep it as the current game WITHOUT restarting the player
+     * (the player owns its own undo history). Already on the shelf -> update it there; otherwise wait for the Save button so a
+     * building session never pushes an older game off a full shelf. Calls from a replaced player are ignored.
+     */
+    function onWorldChange(next, forKey) {
+      if (forKey !== playKeyRef.current || !alive.current) return;
+      const v = E.clientValidate(next);
+      if (!v.ok) return;
+      setSpec(v.spec); setResult(null);
+      setVersions((list) => L.touchVersion(list, v.spec, 'You built the blocks'));
+      if (!L.fitsShelf(v.spec)) { setSaved('This world is too big for My games. Try taking a few blocks away.'); return; }
+      if (!gameId) { setSaved('Your world changed. Press Save to keep it.'); return; }
+      const prev = shelfRef.current, old = prev.find((x) => x.id === gameId);
+      const list = L.saveGame(prev, v.spec, old ? old.name : v.spec.title, old ? old.version : 1, gameId);
+      shelfRef.current = list; setShelf(list);
+      setSaved(storeShelf(list) ? 'World saved to My games.' : 'Could not save on this device, but your world is still here.');
+    }
     function save() {
+      if (!L.fitsShelf(spec)) { setSaved('This game is too big for My games. Try making it a little smaller.'); return; }
       const name = (spec.title || 'My game');
       const list = L.saveGame(shelf, spec, name, curVersion, gameId || undefined);
       const id = (list[0] && list[0].id) || null;
@@ -463,7 +486,7 @@
         {failCard}{noteCard}{breakCard}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
           <div style={{ flex: '1 1 340px', minWidth: 0 }}>
-            {Player ? <Player key={playKey} spec={spec} onEnd={onEnd} onExit={() => setView('dream')} /> : <Card title="The game player is still loading">Give it a second and try again.</Card>}
+            {Player ? <Player key={playKey} spec={spec} onEnd={onEnd} onExit={() => setView('dream')} onChange={(sp) => onWorldChange(sp, playKey)} theme={theme} /> : <Card title="The game player is still loading">Give it a second and try again.</Card>}
             {result && (
               <Card tint={T.paper} title="You made this!" sub={`Version ${curVersion}. ${result.status === 'won' ? 'You won your own game.' : 'Good try! Games get better with every tweak.'}`}>
                 <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -490,7 +513,7 @@
               </Card>
             )}
             <Card title="Change your game" sub="Tap a change, or tell the AI in your own words.">
-              <Row>{L.TWEAK_CHIPS.map((c) => <Chip key={c.id} theme={theme} disabled={!!busy || cooling} onClick={() => doTweak(c.text)}>{c.label}</Chip>)}</Row>
+              <Row>{(spec.template === 'blocks' ? L.TWEAK_CHIPS.concat(L.BLOCK_TWEAK_CHIPS) : L.TWEAK_CHIPS).map((c) => <Chip key={c.id} theme={theme} disabled={!!busy || cooling} onClick={() => doTweak(c.text)}>{c.label}</Chip>)}</Row>
               <textarea ref={tweakRef} value={tweak} maxLength={L.LIMITS.tweak} rows={2} onChange={(e) => setTweak(e.target.value)} aria-label="What should change?"
                 placeholder="Make the bad guys dance..." style={Object.assign({}, inputStyle, { marginTop: 12 })} />
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>

@@ -169,9 +169,47 @@ class StudioLogicTests(unittest.TestCase):
         self.assertEqual(run_js("(()=>{let l=L.saveGame([],E.defaultSpec('maze'),'a',1,'aaaa1');return L.removeGame(l,'aaaa1').length})()"), 0)
 
 
+@unittest.skipUnless(NODE, "node not installed")
+class BlockBuilderLogicTests(unittest.TestCase):
+    def test_should_offer_a_build_a_world_chip_and_accept_the_blocks_template(self):
+        chip = run_js("L.TEMPLATE_CHIPS.find(c=>c.id==='blocks')")
+        self.assertEqual(chip, {"id": "blocks", "label": "Build a world", "hint": "Build a block world, then explore it"})
+        # an unknown template is still refused; blocks is no longer unknown
+        self.assertFalse(run_js("L.buildSpecRequest({template:'evil',idea:'a fine idea'})")["ok"])
+        self.assertEqual(run_js("L.buildSpecRequest({template:'blocks',idea:'a castle in the clouds'}).body.template"), "blocks")
+
+    def test_should_never_use_the_forbidden_game_name_in_kid_copy(self):
+        for f in (LOGIC, JSX, ROOT / "ui" / "vg-aix-blocks.jsx", ROOT / "ui" / "vg-aix-game.jsx"):
+            self.assertNotIn("minecraft", f.read_text().lower(), f.name)
+
+    def test_should_keep_at_most_thirty_undo_steps_and_clear_redo_on_new_edit(self):
+        r = run_js("(()=>{let h=L.emptyHistory();for(let i=0;i<40;i++)h=L.histPush(h,i);const u=L.histUndo(h,'now');const e=L.histPush(u.h,'x');return [h.past.length,h.past[0],u.snap,u.h.future,e.future.length]})()")
+        self.assertEqual(r, [30, 10, 39, ["now"], 0])
+
+    def test_should_redo_what_was_undone_and_do_nothing_on_empty_history(self):
+        r = run_js("(()=>{let h=L.histPush(L.emptyHistory(),'a');const u=L.histUndo(h,'b');const d=L.histRedo(u.h,'a');return [d.snap,d.h.past,d.h.future,L.histUndo(L.emptyHistory(),'z'),L.histRedo(L.emptyHistory(),'z')]})()")
+        self.assertEqual(r, ["b", ["a"], [], None, None])
+
+    def test_should_fold_repeated_block_edits_into_one_version(self):
+        r = run_js("(()=>{const s=E.defaultSpec('catcher');let v=L.addVersion([],s,'First version');v=L.touchVersion(v,s,'You built the blocks');v=L.touchVersion(v,s,'You built the blocks');return v.map(x=>[x.n,x.words])})()")
+        self.assertEqual(r, [[1, "First version"], [2, "You built the blocks"]])
+
+    def test_should_tell_whether_a_spec_fits_the_shelf(self):
+        self.assertTrue(run_js("L.fitsShelf(E.defaultSpec('maze'))"))
+        self.assertFalse(run_js("L.fitsShelf({x:'y'.repeat(L.MAX_GAME_BYTES)})"))
+
+    def test_should_save_a_blocks_starter_on_the_shelf_when_the_engine_supports_it(self):
+        # needs the engine's blocks support (AIXBlocks); skipped until it is present
+        has = run_js("E.TEMPLATES.indexOf('blocks')>=0")
+        if not has:
+            self.skipTest("engine has no blocks template yet")
+        r = run_js("(()=>{const s=E.defaultSpec('blocks');const l=L.saveGame([],s,'My world',1,'blk01');return [s.template,l.length,JSON.stringify(s).length<=L.MAX_GAME_BYTES,L.parseShelf(L.serializeShelf(l)).length]})()")
+        self.assertEqual(r, ["blocks", 1, True, 1])
+
+
 class StudioSourceSafetyTests(unittest.TestCase):
     """Binding security rules for ui/vg-aix-* files (spec: Security requirements 1)."""
-    FILES = [ROOT / "ui" / "vg-aix-studio.jsx", ROOT / "ui" / "vg-aix-studio-logic.js"]
+    FILES = [ROOT / "ui" / "vg-aix-studio.jsx", ROOT / "ui" / "vg-aix-studio-logic.js", ROOT / "ui" / "vg-aix-blocks.jsx"]
 
     def test_should_not_use_markup_injection_or_dynamic_code(self):
         for f in self.FILES:

@@ -12,17 +12,21 @@ import re
 
 import safety
 
-MAX_JSON_CHARS = 6000
-TEMPLATES = ("catcher", "runner", "maze", "shooter", "quiz")
+MAX_JSON_CHARS = 8000
+TEMPLATES = ("catcher", "runner", "maze", "shooter", "quiz", "blocks")
 SHAPES = ("circle", "square", "triangle", "star", "heart")
 GOAL_KINDS = ("score", "survive", "reach")
 THEMES = ("space", "forest", "sea", "city", "candy")
+TERRAINS = ("meadow", "desert", "snow", "island", "candy")   # Block Builder 3D world look
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 _CTRL = re.compile(r"[\x00-\x1f\x7f-\x9f  ​-‏‪-‮⁦-⁩]")
 _UNSAFE = re.compile(r"[<>]|javascript\s*:|data\s*:", re.I)      # markup / script-ish text never reaches the canvas
 _DEFAULT_COLORS = ("#ff7a59", "#4cc9f0", "#ffd166", "#06d6a0", "#ef476f", "#9b5de5")   # fixed fallback palette
 _DEFAULT_BG = "#1b2a49"
 _ROW_RE = re.compile(r"^[0-9]{8}$")
+MATERIALS = ".gdswlbaytcpj"                         # Block Builder alphabet: "." air, then cartoon-only materials
+BUILD_SIZE, BUILD_MAX_LAYERS = 12, 6
+_BUILD_ROW = re.compile(r"^[.gdswlbaytcpj]{12}$")
 
 
 class _Bad(Exception):
@@ -30,7 +34,7 @@ class _Bad(Exception):
 
 
 def extract_json(text) -> dict | None:
-    """First balanced {...} object in `text` that parses as JSON → dict, else None. Refuses > 6000 chars.
+    """First balanced {...} object in `text` that parses as JSON → dict, else None. Refuses > MAX_JSON_CHARS.
     json.loads only (no eval); never raises."""
     try:
         if not isinstance(text, str) or len(text) > MAX_JSON_CHARS:
@@ -156,6 +160,32 @@ def _quiz(v) -> dict:
     return {"questions": out}
 
 
+def _build(v) -> dict:
+    """Block Builder grid: 1..6 layers (bottom first) of exactly 12 rows of exactly 12 chars from MATERIALS.
+    Needs >= 1 block and >= 1 walkable column (top is not water). Strict: never clamped or repaired."""
+    layers = _obj(v, "build").get("layers")
+    if not isinstance(layers, list) or not 1 <= len(layers) <= BUILD_MAX_LAYERS:
+        raise _Bad(f"build needs 1 to {BUILD_MAX_LAYERS} layers")
+    out = []
+    for n, layer in enumerate(layers):
+        if not isinstance(layer, list) or len(layer) != BUILD_SIZE:
+            raise _Bad(f"build layer {n + 1} needs exactly {BUILD_SIZE} rows")
+        if not all(isinstance(r, str) and _BUILD_ROW.fullmatch(r) for r in layer):    # fullmatch: `$` would allow a trailing newline
+            raise _Bad(f"build layer {n + 1} rows need exactly {BUILD_SIZE} known block letters")
+        out.append(list(layer))
+    tops = {}                                            # (x, y) → highest non-air char of that column
+    for layer in out:                                    # bottom first, so later layers overwrite
+        for y, row in enumerate(layer):
+            for x, ch in enumerate(row):
+                if ch != ".":
+                    tops[(x, y)] = ch
+    if not tops:
+        raise _Bad("build has no blocks")
+    if all(ch == "a" for ch in tops.values()):
+        raise _Bad("build needs some ground to walk on")
+    return {"layers": out}
+
+
 def validate_spec(obj) -> tuple[dict | None, list[str]]:
     """Strict allow-list validation → (clean spec, []) or (None, errors). Never raises."""
     errors: list[str] = []
@@ -183,12 +213,18 @@ def validate_spec(obj) -> tuple[dict | None, list[str]]:
         if world is not None:
             clean["world"] = {"bg": _color(world.get("bg"), _DEFAULT_BG),
                               "theme": take(_enum, world.get("theme"), THEMES, "world.theme")}
+            if template == "blocks":                     # terrain + seed exist iff blocks; defaulted when missing, strict when present
+                clean["world"]["terrain"] = (take(_enum, world["terrain"], TERRAINS, "world.terrain")
+                                             if "terrain" in world else "meadow")
+                clean["world"]["seed"] = take(_int, world["seed"], 0, 999999, "world.seed") if "seed" in world else 1
         if rules is not None:
             clean["rules"] = {k: take(_int, rules.get(k), 1, 5, f"rules.{k}") for k in ("speed", "lives", "spawnRate")}
         if texts is not None:
             clean["texts"] = {k: take(_str, texts.get(k), 80, f"texts.{k}") for k in ("start", "win", "lose")}
         if template == "quiz":                           # quiz block exists iff the template is quiz
             clean["quiz"] = take(_quiz, obj.get("quiz"))
+        if template == "blocks":                         # build grid exists iff the template is blocks
+            clean["build"] = take(_build, obj.get("build"))
         ask = take(_str, obj.get("ask"), 80, "ask", False)
         if ask:
             clean["ask"] = ask

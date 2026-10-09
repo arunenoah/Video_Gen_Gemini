@@ -2,15 +2,22 @@
 // The AI only ever writes a small JSON "game spec"; this engine validates it (clientValidate) and plays it.
 // No AI text is ever run as code: specs are data, rules live here. Deterministic: same spec + seed + inputs = same game.
 (function (root) {
-  const TEMPLATES = ['catcher', 'runner', 'maze', 'shooter', 'quiz'];
+  const TEMPLATES = ['catcher', 'runner', 'maze', 'shooter', 'quiz', 'blocks'];
   const SHAPES = ['circle', 'square', 'triangle', 'star', 'heart'];
   const THEMES = ['space', 'forest', 'sea', 'city', 'candy'];
+  const TERRAINS = ['meadow', 'desert', 'snow', 'island', 'candy'];
   const KINDS = ['score', 'survive', 'reach'];
   const HEX = /^#[0-9a-fA-F]{6}$/;
   // Fixed fallback colours (same idea as the server's palette): a bad colour is swapped, never trusted.
   const DEFAULT_COLOR = { hero: '#ff7a59', good: '#2f9e5b', bad: '#6b4bd6', bg: '#14202b', sprite: '#888888' };
   const W = 100, H = 100;                 // logical world; the canvas scales it
   const MAX_DT = 50;                      // ms; a long frame (tab switch) never teleports things
+
+  /** The Block Builder module, loaded lazily so script order in the page does not matter (null if it is missing). */
+  function blocksMod() {
+    if (typeof module !== 'undefined' && module.exports) { try { return require('./vg-aix-blocks.js'); } catch (e) { return null; } }
+    return root.AIXBlocks || null;
+  }
 
   // ---------- validation ----------
   const own = (o, k) => o !== null && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined;
@@ -138,6 +145,18 @@
           out.quiz = { questions: list };
         }
       }
+      if (template === 'blocks') {
+        // Optional 3D-world fields: defaulted when absent, an error (never a silent repair) when present but wrong.
+        const tr = own(w, 'terrain'), sd = own(w, 'seed');
+        if (world) {
+          if (tr !== undefined && TERRAINS.indexOf(tr) < 0) errors.push('world terrain is not one of ' + TERRAINS.join('/'));
+          if (sd !== undefined && !(typeof sd === 'number' && Number.isFinite(sd))) errors.push('world seed must be a number');
+          world.terrain = tr === undefined ? 'meadow' : tr;
+          world.seed = typeof sd === 'number' && Number.isFinite(sd) ? Math.max(0, Math.min(999999, Math.round(sd))) : 1;
+        }
+        const bm = blocksMod(), bv = bm ? bm.validateBuild(own(spec, 'build')) : { ok: false, errors: ['block worlds are not available'] };
+        if (bv.ok) out.build = bv.build; else bv.errors.forEach((e) => errors.push('build: ' + e));
+      }
       const ask = own(spec, 'ask');
       if (ask !== undefined && ask !== null) { const a = cleanStr(ask, 80, 'ask', errors, false); if (a) out.ask = a; }
       const ni = own(spec, 'nextIdeas');
@@ -200,10 +219,19 @@
     }
   };
 
+  STARTERS.blocks = {
+    v: 1, template: 'blocks', title: 'Sky Island', hero: { shape: 'star', color: '#ffb703', name: 'Builder Bee' },
+    goal: { kind: 'score', target: 5 }, items: { good: { shape: 'circle', color: '#ffd23f', name: 'Golden coin' }, bad: { shape: 'heart', color: '#7bd88f', name: 'Wobbly slime' } },
+    world: { bg: '#8fd3ff', theme: 'forest' }, rules: { speed: 3, lives: 3, spawnRate: 2 },
+    texts: { start: 'Explore the island and grab the golden coins. Hop on the jelly!', win: 'Builder Bee found every coin!', lose: 'The slimes wobbled you away. Try again!' },
+    ask: 'What should we build on the island next?', nextIdeas: ['Add a candy castle', 'Make a bridge in the sky']
+  };
+
   /** @param {string} template one of TEMPLATES @returns {Object} a fresh, valid, fun starter spec (falls back to catcher). */
   function defaultSpec(template) {
-    const s = STARTERS[TEMPLATES.indexOf(template) >= 0 ? template : 'catcher'];
-    return JSON.parse(JSON.stringify(s));
+    const s = JSON.parse(JSON.stringify(STARTERS[TEMPLATES.indexOf(template) >= 0 ? template : 'catcher']));
+    if (s.template === 'blocks') { const bm = blocksMod(); if (bm) s.build = bm.starterBuild(); }
+    return s;
   }
 
   // ---------- seeded random (mulberry32); state lives in the game state so step stays pure ----------
@@ -276,6 +304,7 @@
     const s0 = { rs: (Number.isFinite(seed) ? Math.floor(seed) : 1) >>> 0 };
     if (!v.ok) return { status: 'invalid', errors: v.errors, events: [], ents: [], bullets: [] };
     const sp = v.spec;
+    if (sp.template === 'blocks') { const bm = blocksMod(); return bm ? bm.create(sp, seed) : { status: 'invalid', errors: ['block worlds are not available'], events: [], ents: [], bullets: [] }; }
     const st = { v: 1, template: sp.template, spec: sp, status: 'playing', t: 0, score: 0, lives: sp.rules.lives, rs: s0.rs, progress: 0, events: [], ents: [], bullets: [], nextId: 1, spawnIn: 500, cd: 0, prev: 0, forceGood: true,
       hero: { x: W / 2, y: 90 }, msg: sp.texts.start };
     if (sp.template === 'runner') { st.hero = { x: 18, y: LANE_Y[1], lane: 1 }; }
@@ -314,6 +343,7 @@
    */
   function step(state, input, dtMs) {
     if (!state || state.status !== 'playing') return state;
+    if (state.template === 'blocks') { const bm = blocksMod(); return bm ? bm.step(state, input, dtMs) : state; }
     const st = clone(state), sp = st.spec, rules = sp.rules, goal = sp.goal;
     const inp = isObj(input) ? input : {};
     const dt = Math.max(0, Math.min(MAX_DT, Number.isFinite(dtMs) ? dtMs : 0)), sec = dt / 1000;
@@ -433,6 +463,8 @@
   const GOAL_TEXT = { score: 'Collect', survive: 'Survive', reach: 'Reach the finish' };
   const actorText = (a) => a.name + ' (' + colorName(a.color) + ' ' + a.shape + (a.sprite ? (a.sprite.by === 'kid' ? ', drawn by you' : a.sprite.by === 'starter' ? ', starter drawing' : ', AI-drawn') : '') + ')';
 
+  const countBlocks = (b) => b.layers.reduce((n, l) => n + l.join('').replace(/\./g, '').length, 0);
+
   /**
    * Kid-readable settings card: what the AI decided. Empty list if the spec is not valid.
    * @param {Object} spec @returns {{label:string,value:string,hint:string}[]}
@@ -441,9 +473,10 @@
     const v = clientValidate(spec);
     if (!v.ok) return [];
     const s = v.spec, r = s.rules;
-    const unit = { catcher: 'catches', runner: 'bubbles', shooter: 'pops', maze: 'tiles', quiz: 'right answers' }[s.template];
+    const unit = { catcher: 'catches', runner: 'bubbles', shooter: 'pops', maze: 'tiles', quiz: 'right answers', blocks: 'good things' }[s.template];
     let goalVal;
     if (s.template === 'maze') goalVal = 'Find the way out';
+    else if (s.template === 'blocks' && s.goal.kind === 'reach') goalVal = 'Reach the flag';
     else if (s.template === 'quiz') goalVal = 'Get ' + Math.min(s.goal.target, s.quiz.questions.length) + ' right';
     else if (s.goal.kind === 'score') goalVal = 'Get ' + s.goal.target + ' ' + unit;
     else goalVal = (s.goal.kind === 'survive' ? 'Survive ' : 'Keep going ') + s.goal.target + ' seconds';
@@ -475,6 +508,10 @@
       const x = k === 'hero' ? A.hero : A.items[k], y = k === 'hero' ? B.hero : B.items[k];
       if (JSON.stringify(x.sprite || null) !== JSON.stringify(y.sprite || null)) out.push((k === 'hero' ? 'Hero' : k === 'good' ? 'Good stuff' : 'Bad stuff') + ' drawing changed');
     });
+    if (A.build && B.build && JSON.stringify(A.build) !== JSON.stringify(B.build)) {
+      const ca = countBlocks(A.build), cb = countBlocks(B.build);
+      out.push(ca !== cb ? 'Blocks ' + ca + ' -> ' + cb : 'The block world changed');
+    }
     if (A.template === 'quiz' && B.template === 'quiz' && JSON.stringify(A.quiz) !== JSON.stringify(B.quiz)) out.push('The questions changed');
     return out;
   }

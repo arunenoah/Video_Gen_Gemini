@@ -11,6 +11,15 @@ import gamespec   # noqa: E402
 SPRITE = {"palette": ["#ff0000", "#00ff00"], "rows": ["01010101"] * 8}
 
 
+def good_build():
+    """A valid 2-layer 12x12 build: a grass floor with a wood post and a little pond (fresh copy each call)."""
+    floor = ["g" * 12 for _ in range(12)]
+    floor[5] = "gggaagggggg" + "g"
+    top = ["." * 12 for _ in range(12)]
+    top[2] = "..w........."
+    return {"layers": [floor, top]}
+
+
 def good_spec(template="catcher"):
     """A fully valid spec (fresh copy each call)."""
     spec = {
@@ -24,6 +33,8 @@ def good_spec(template="catcher"):
         "texts": {"start": "Dive in!", "win": "You did it!", "lose": "Try again!"},
         "ask": "Should the jellies be silly or spooky?", "nextIdeas": ["Add a whale", "Glow in the dark"],
     }
+    if template == "blocks":
+        spec["build"] = good_build()
     if template == "quiz":
         spec["quiz"] = {"questions": [{"q": "2+2?", "options": ["3", "4", "5"], "answer": 1}]}
     return spec
@@ -37,7 +48,7 @@ class ExtractJsonTests(unittest.TestCase):
         self.assertEqual(gamespec.extract_json('{"a": "}{ \\" }"}'), {"a": "}{ \" }"})
 
     def test_should_return_none_for_garbage_oversize_and_non_strings(self):
-        for bad in ("no json", "{unclosed", "{" * 50, None, 5, ["x"], "x" * 6001, '{"a": 1', "{'a': 1}"):
+        for bad in ("no json", "{unclosed", "{" * 50, None, 5, ["x"], "x" * 8001, '{"a": 1', "{'a': 1}"):
             self.assertIsNone(gamespec.extract_json(bad))
 
     def test_should_not_raise_on_deeply_nested_json(self):
@@ -48,6 +59,172 @@ class ExtractJsonTests(unittest.TestCase):
         self.assertIsNone(gamespec.extract_json("__import__('os').system('x')"))
 
 
+class BlocksBuildTests(unittest.TestCase):
+    def _spec(self, build):
+        s = good_spec("blocks")
+        s["build"] = build
+        return gamespec.validate_spec(s)
+
+    def _rejects(self, build):
+        clean, errs = self._spec(build)
+        self.assertIsNone(clean, build)
+        self.assertTrue(errs)
+
+    def test_should_accept_and_round_trip_a_good_build(self):
+        clean, errs = self._spec(good_build())
+        self.assertEqual(errs, [])
+        self.assertEqual(clean["build"], good_build())
+        self.assertEqual(gamespec.validate_spec(clean)[0], clean)          # previous_spec round trip
+
+    def test_should_accept_one_and_six_layers(self):
+        one = {"layers": [good_build()["layers"][0]]}
+        six = {"layers": [good_build()["layers"][0]] + [["." * 12] * 12] * 5}
+        self.assertEqual(self._spec(one)[1], [])
+        self.assertEqual(self._spec(six)[1], [])
+
+    def test_should_accept_every_material_letter(self):
+        row = gamespec.MATERIALS[1:]
+        self.assertEqual(len(row), 12)
+        self.assertEqual(self._spec({"layers": [[row] * 12]})[1], [])
+
+    def test_should_accept_a_walkable_top_over_water(self):
+        b = {"layers": [["a" * 12] * 12, ["y" + "." * 11] + ["." * 12] * 11]}
+        self.assertEqual(self._spec(b)[1], [])
+
+    def test_should_reject_unknown_letters_and_hostile_rows(self):
+        base = good_build()
+        for bad in ("x", "L", "1", " ", "<", "é", "\n"):                  # includes lava-ish / markup / unicode / newline
+            b = good_build()
+            b["layers"][0][0] = bad + "g" * 11
+            self._rejects(b)
+        b = good_build()
+        b["layers"][0][0] = "g" * 11 + "\n"                                 # a trailing newline must not slip past `$`
+        self._rejects(b)
+        self.assertEqual(base, good_build())
+
+    def test_should_reject_wrong_row_length(self):
+        for row in ("g" * 13, "g" * 11, ""):
+            b = good_build()
+            b["layers"][0][3] = row
+            self._rejects(b)
+
+    def test_should_reject_wrong_row_count(self):
+        for n in (11, 13, 0):
+            b = good_build()
+            b["layers"][0] = ["g" * 12] * n
+            self._rejects(b)
+
+    def test_should_reject_zero_or_seven_layers(self):
+        self._rejects({"layers": []})
+        self._rejects({"layers": [["g" * 12] * 12] * 7})
+
+    def test_should_reject_all_air_and_all_water(self):
+        self._rejects({"layers": [["." * 12] * 12]})
+        self._rejects({"layers": [["a" * 12] * 12]})
+        self._rejects({"layers": [["a" * 12] * 12, ["." * 12] * 12]})
+
+    def test_should_reject_water_topped_columns_when_nothing_is_walkable(self):
+        floor = ["g" * 12] * 12
+        self._rejects({"layers": [floor, ["a" * 12] * 12]})                  # water covers every column
+
+    def test_should_reject_wrong_types_without_raising(self):
+        for bad in (None, "g", 5, [], {}, {"layers": None}, {"layers": "gggg"}, {"layers": [None]}, {"layers": [["g" * 12] * 12, 5]},
+                    {"layers": [[5] * 12]}, {"layers": [[["g"] * 12] * 12]}, {"layers": {"0": ["g" * 12] * 12}}):
+            self._rejects(bad)
+
+    def test_should_reject_a_missing_build_on_the_blocks_template(self):
+        s = good_spec("blocks")
+        del s["build"]
+        clean, errs = gamespec.validate_spec(s)
+        self.assertIsNone(clean)
+        self.assertTrue(errs)
+
+    def _world(self, template="blocks", **extra):
+        s = good_spec(template)
+        s["world"].update(extra)
+        return gamespec.validate_spec(s)
+
+    def test_should_default_terrain_and_seed_on_blocks(self):
+        clean, errs = self._world()
+        self.assertEqual(errs, [])
+        self.assertEqual((clean["world"]["terrain"], clean["world"]["seed"]), ("meadow", 1))
+
+    def test_should_accept_every_terrain_and_normalise_case(self):
+        for t in gamespec.TERRAINS:
+            clean, errs = self._world(terrain=t.upper(), seed=42)
+            self.assertEqual(errs, [], t)
+            self.assertEqual((clean["world"]["terrain"], clean["world"]["seed"]), (t, 42))
+
+    def test_should_reject_a_bad_terrain_on_blocks(self):
+        for bad in ("lava", "", None, 5, ["desert"], {"a": 1}, True):
+            clean, errs = self._world(terrain=bad)
+            self.assertIsNone(clean, bad)
+            self.assertTrue(errs)
+
+    def test_should_clamp_seed_and_reject_non_numbers(self):
+        for raw, want in ((-5, 0), (0, 0), (999999, 999999), (10**12, 999999), (7.9, 7)):
+            clean, errs = self._world(seed=raw)
+            self.assertEqual(errs, [], raw)
+            self.assertEqual(clean["world"]["seed"], want, raw)
+        for bad in ("12", None, True, [1], float("nan"), float("inf")):
+            clean, errs = self._world(seed=bad)
+            self.assertIsNone(clean, bad)
+            self.assertTrue(errs)
+
+    def test_should_drop_terrain_and_seed_on_other_templates_even_if_hostile(self):
+        for t in gamespec.TEMPLATES:
+            if t == "blocks":
+                continue
+            clean, errs = self._world(t, terrain="<script>", seed="x")
+            self.assertEqual(errs, [], t)
+            self.assertNotIn("terrain", clean["world"], t)
+            self.assertNotIn("seed", clean["world"], t)
+
+    def test_should_drop_build_on_every_other_template(self):
+        for t in gamespec.TEMPLATES:
+            if t == "blocks":
+                continue
+            s = good_spec(t)
+            s["build"] = good_build()
+            clean, errs = gamespec.validate_spec(s)
+            self.assertEqual(errs, [], t)
+            self.assertNotIn("build", clean, t)
+
+    def test_should_ignore_a_hostile_build_on_a_non_blocks_template(self):
+        s = good_spec()
+        s["build"] = {"layers": "<script>"}
+        clean, errs = gamespec.validate_spec(s)
+        self.assertEqual(errs, [])
+        self.assertNotIn("build", clean)
+
+    def test_should_drop_unknown_keys_inside_build(self):
+        b = good_build()
+        b["evil"] = "x"
+        self.assertEqual(set(self._spec(b)[0]["build"]), {"layers"})
+
+    def test_should_survive_giant_nested_build(self):
+        deep = {"layers": [[]]}
+        node = deep["layers"][0]
+        for _ in range(3000):
+            nxt = []
+            node.append(nxt)
+            node = nxt
+        clean, errs = self._spec(deep)
+        self.assertIsNone(clean)
+        gamespec.extract_json('{"build":' + "[" * 3000 + "]" * 3000 + "}")      # parses (under the cap) or not; must not raise
+
+    def test_should_fit_a_full_six_layer_spec_inside_the_json_limit(self):
+        s = good_spec("blocks")
+        s["build"] = {"layers": [["g" * 12] * 12] * 6}
+        text = json.dumps(s)
+        self.assertLessEqual(len(text), gamespec.MAX_JSON_CHARS)
+        self.assertEqual(gamespec.extract_json(text), s)
+        self.assertIsNone(gamespec.extract_json(text + " " * gamespec.MAX_JSON_CHARS))
+
+    def test_should_not_add_build_text_to_the_kid_visible_strings(self):
+        self.assertNotIn("gggg", gamespec.spec_texts(gamespec.validate_spec(good_spec("blocks"))[0]))
+
+
 class ValidateSpecTests(unittest.TestCase):
     def test_should_accept_a_good_spec_for_every_template(self):
         for t in gamespec.TEMPLATES:
@@ -55,6 +232,7 @@ class ValidateSpecTests(unittest.TestCase):
             self.assertEqual(errs, [], t)
             self.assertEqual(clean["template"], t)
             self.assertEqual(("quiz" in clean), t == "quiz")
+            self.assertEqual(("build" in clean), t == "blocks")
 
     def test_should_drop_unknown_keys_everywhere(self):
         s = good_spec()

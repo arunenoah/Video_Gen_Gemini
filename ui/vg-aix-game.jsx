@@ -162,10 +162,10 @@
   const ARROW = { left: 'M17 4 L7 13 L17 22 Z', right: 'M9 4 L19 13 L9 22 Z', up: 'M4 17 L13 7 L22 17 Z', down: 'M4 9 L13 19 L22 9 Z', fire: 'M13 3 L16 12 L24 13 L16 15 L13 24 L10 15 L2 13 L10 12 Z' };
 
   /**
-   * Plays a game spec.
+   * Plays a classic (non-blocks) game spec.
    * @param {{spec:Object, onEnd:(result:{status:'won'|'lost',score:number,lives:number,seconds:number,template:string,title:string})=>void, onExit:()=>void, theme?:{primary?:string}}} props
    */
-  function AixGamePlayer({ spec, onEnd, onExit, theme }) {
+  function AixClassicPlayer({ spec, onEnd, onExit, theme }) {
     const accent = (theme && theme.primary) || '#2f6fed';
     const [dropped, setDropped] = React.useState([]);          // quiz questions the child reported as wrong (this visit only)
     const [bannerDone, setBannerDone] = React.useState(false);
@@ -407,5 +407,20 @@
     );
   }
 
+  /**
+   * Entry point the Studio uses. Block Builder worlds ('blocks') go to AIX_BLOCKS.BlocksPlayer; everything else
+   * to the classic player. A wrapper (not a branch inside the player) keeps hook order stable for each player.
+   */
+  function AixGamePlayer(props) {
+    if (props.spec && props.spec.template === 'blocks') {
+      const B = window.AIX_BLOCKS;
+      if (B && B.BlocksPlayer) return <B.BlocksPlayer {...props} />;
+      return <div role="status" style={{ padding: 16, color: MUTE }}>The block world is still loading. Give it a second and try again.</div>;
+    }
+    return <AixClassicPlayer {...props} />;
+  }
+
   window.AixGamePlayer = AixGamePlayer;
+  // Drawing helpers shared with the Block Builder canvas (kid sprites + shapes + scenery stay in one place).
+  window.AixDraw = { drawActor: drawActor, drawScenery: drawScenery, luma: luma, mix: mix, K: K };
 })();

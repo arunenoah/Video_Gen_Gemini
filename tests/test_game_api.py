@@ -107,6 +107,62 @@ class GameApiTests(LiveServerCase):
             body = json.loads(self._post(template="quiz").body)
         self.assertEqual(body["spec"]["quiz"]["questions"][0]["answer"], 1)
 
+    def test_should_support_the_blocks_template_and_auto(self):
+        for tpl in ("blocks", "auto"):
+            with mock.patch.object(openrouter_chat, "chat", return_value=(_model(good_spec("blocks")), 0.0)) as m:
+                body = json.loads(self._post(template=tpl).body)
+            self.assertEqual(body["spec"]["build"], good_spec("blocks")["build"])
+            self.assertEqual(m.call_args.kwargs["max_tokens"], openrouter_chat.GAME_MAX_TOKENS)
+        self.assertIn("blocks", m.call_args.args[1][0]["content"])
+
+    def test_should_round_trip_terrain_and_seed_and_default_them(self):
+        spec = good_spec("blocks")
+        spec["world"].update(terrain="desert", seed=123)
+        with mock.patch.object(openrouter_chat, "chat", return_value=(_model(spec), 0.0)):
+            body = json.loads(self._post(template="blocks").body)
+        self.assertEqual((body["spec"]["world"]["terrain"], body["spec"]["world"]["seed"]), ("desert", 123))
+        with mock.patch.object(openrouter_chat, "chat", return_value=(_model(good_spec("blocks")), 0.0)):
+            body = json.loads(self._post(template="blocks").body)
+        self.assertEqual((body["spec"]["world"]["terrain"], body["spec"]["world"]["seed"]), ("meadow", 1))
+
+    def test_should_tell_the_model_about_terrain_and_the_plot(self):
+        self.assertIn("world.terrain", openrouter_chat.GAME_SYSTEM)
+        self.assertIn("plot", openrouter_chat.GAME_SYSTEM)
+        self.assertIn("terrain", openrouter_chat._SPEC_SHAPE)
+        self.assertNotIn("minecraft", openrouter_chat.GAME_SYSTEM.lower())
+
+    def test_should_round_trip_a_blocks_previous_spec(self):
+        prev = good_spec("blocks")
+        prev["build"]["evil"] = "x"
+        with mock.patch.object(openrouter_chat, "chat", return_value=(_model(good_spec("blocks")), 0.0)) as m:
+            r = self._post(template="blocks", tweak="add a bigger pond", previous_spec=prev)
+        self.assertEqual(r.status, 200)
+        sent = m.call_args.args[1][0]["content"]
+        self.assertIn('"build":{"layers":', sent)
+        self.assertNotIn("evil", sent)
+
+    def test_should_400_on_an_invalid_blocks_previous_spec(self):
+        prev = good_spec("blocks")
+        prev["build"]["layers"][0][0] = "x" * 12
+        with mock.patch.object(openrouter_chat, "chat") as m:
+            self.assertEqual(self._post(template="blocks", previous_spec=prev).status, 400)
+        m.assert_not_called()
+
+    def test_should_502_when_the_model_returns_a_bad_build(self):
+        bad = good_spec("blocks")
+        bad["build"]["layers"][0][0] = "g" * 13
+        with mock.patch.object(openrouter_chat, "chat", return_value=(_model(bad), 0.0)):
+            r = self._post(template="blocks")
+        self.assertEqual(r.status, 502)
+        self.assertNotIn("ggggggggggggg", r.body.decode())
+
+    def test_should_drop_build_the_model_adds_to_a_non_blocks_game(self):
+        s = good_spec()
+        s["build"] = good_spec("blocks")["build"]
+        with mock.patch.object(openrouter_chat, "chat", return_value=(_model(s), 0.0)):
+            body = json.loads(self._post().body)
+        self.assertNotIn("build", body["spec"])
+
     # ── repair ──
     def test_should_repair_once_then_succeed_and_bill_both_calls(self):
         self._topup("alice")

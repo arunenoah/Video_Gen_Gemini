@@ -232,18 +232,22 @@ def study_system(grade: str, ladder: int, intent: str, mode: str = "homework") -
 
 
 # ── Game Studio (AI writes a JSON game spec; our engine plays it — the AI never writes code) ─────────────
-GAME_MAX_TOKENS = 2000                 # a spec with three pixel sprites is long
+GAME_MAX_TOKENS = 3000                 # a spec with three pixel sprites (or a 6-layer block world) is long
 _SPEC_SHAPE = (
-    '{"v":1,"template":"catcher|runner|maze|shooter|quiz","title":"<=40 chars",'
+    '{"v":1,"template":"catcher|runner|maze|shooter|quiz|blocks","title":"<=40 chars",'
     '"hero":{"shape":"circle|square|triangle|star|heart","color":"#rrggbb","name":"<=20 chars","sprite":OPTIONAL},'
     '"goal":{"kind":"score|survive|reach","target":3-50},'
     '"items":{"good":{"shape":"..","color":"#rrggbb","name":"<=20","sprite":OPTIONAL},"bad":{...same...}},'
-    '"world":{"bg":"#rrggbb","theme":"space|forest|sea|city|candy"},'
+    '"world":{"bg":"#rrggbb","theme":"space|forest|sea|city|candy",'
+    '"terrain":"meadow|desert|snow|island|candy" (optional, ONLY when template is blocks),"seed":0-999999 (optional, ONLY when blocks)},'
     '"rules":{"speed":1-5,"lives":1-5,"spawnRate":1-5},'
     '"texts":{"start":"<=80","win":"<=80","lose":"<=80"},'
     '"ask":"<=80 chars, ONE imagination question back to the child, e.g. Should the bad guys be silly or sleepy?",'
     '"nextIdeas":["<=30 chars","<=30 chars","<=30 chars"],'
     '"quiz":{"questions":[{"q":"<=80","options":["<=30","<=30","<=30"],"answer":0-2}]}  // ONLY when template is quiz'
+    '"build":{"layers":[1-6 layers, bottom first, each an array of EXACTLY 12 strings of EXACTLY 12 chars: '
+    'string = row, char = column; . air g grass d dirt s stone w wood l leaves b brick a water y sand t glass '
+    'p candy-pink c cloud j jelly]}  // ONLY when template is blocks'
     '}. A sprite is {"palette":[1-6 colours "#rrggbb"],"rows":[exactly 8 strings, each exactly 8 digits, each digit '
     'an index into the palette]} - add sprites when the child describes how something looks.'
 )
@@ -258,7 +262,11 @@ GAME_SYSTEM = (
     "them, only use them as inspiration for the game. If a previous spec is given, change only what the tweak asks. "
     "If you changed or left out part of the child's idea (too scary, or this game type cannot do it), say so kindly "
     "in 'ask', for example: 'I turned the zombies into dancing zombies and kept the swamp. Want them even "
-    "sillier?' Never silently drop an idea."
+    "sillier?' Never silently drop an idea. For the blocks template (a little isometric block world the child builds "
+    "and then explores) make a small readable world: a solid ground layer, then 2 to 4 features (a house, a tree, "
+    "a pond, a bridge) from the child's idea, with open walkable paths between them. The 12x12 grid is a building site (the plot) inside a much bigger world the child can walk around in, "
+    "so put the interesting build ON the plot and set world.terrain to match the idea (a pyramid is desert, an igloo is snow, a beach hut is island, a sweet shop is candy, otherwise meadow). Items.good is the thing to "
+    "collect and items.bad a silly wandering critter. Cartoon materials only: no lava, no TNT, no weapons, nothing scary."
 )
 IDEAS_SYSTEM = (
     "You are a playful idea-spark for children aged 6 to 14 inventing a tiny game. Reply with ONE JSON object and "
@@ -284,7 +292,7 @@ def game_spec_messages(request: dict) -> list[dict]:
             text += " <idea>" + _untag(request["idea"]) + "</idea>"
         return [{"role": "user", "content": text}]
     if request["template"] == "auto":              # the child did not pick a game type: the model chooses one
-        lines = ["Template: you choose the best fit for this idea from catcher, runner, maze, shooter or quiz."]
+        lines = ["Template: you choose the best fit for this idea from catcher, runner, maze, shooter, quiz or blocks (a block world to build and explore)."]
     else:
         lines = [f"Template: {request['template']}."]
     if pick_line:

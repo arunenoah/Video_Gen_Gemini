@@ -52,8 +52,8 @@ T = ["catcher", "runner", "maze", "shooter", "quiz"]
 
 @unittest.skipUnless(NODE, "node not installed")
 class StarterTests(unittest.TestCase):
-    def test_should_list_the_five_templates(self):
-        self.assertEqual(run_js("out(E.TEMPLATES)"), T)
+    def test_should_list_the_five_classic_templates_plus_blocks(self):
+        self.assertEqual(run_js("out(E.TEMPLATES)"), T + ["blocks"])
 
     def test_should_ship_a_valid_fun_starter_with_ask_and_ideas_for_every_template(self):
         for t in T:
@@ -63,6 +63,21 @@ class StarterTests(unittest.TestCase):
             self.assertGreaterEqual(len(r["s"]["nextIdeas"]), 2)
             self.assertEqual(r["s"]["template"], t)
             self.assertEqual(r["v"]["spec"]["title"], r["s"]["title"])
+
+    def test_should_ship_a_valid_blocks_starter_that_plays(self):
+        r = run_js("const s=E.defaultSpec('blocks');let st=E.create(s,1);const a=st.status;st=E.step(st,{dx:1},16);out([E.clientValidate(s).ok,a,st.template,s.template])")
+        self.assertEqual(r, [True, "playing", "blocks", "blocks"])
+
+    def test_should_default_and_clamp_blocks_terrain_and_seed(self):
+        r = run_js("const s=E.defaultSpec('blocks');const a=E.clientValidate(s).spec.world;s.world.terrain='snow';s.world.seed=9999999;const b=E.clientValidate(s).spec.world;s.world.seed=-5;out([a.terrain,a.seed,b.terrain,b.seed,E.clientValidate(s).spec.world.seed])")
+        self.assertEqual(r, ["meadow", 1, "snow", 999999, 0])
+
+    def test_should_reject_bad_blocks_terrain_or_seed_type(self):
+        for fld in ["terrain='lava'", "terrain=5", "seed='7'", "seed=null"]:
+            self.assertFalse(run_js(f"const s=E.defaultSpec('blocks');s.world.{fld};out(E.clientValidate(s).ok)"), fld)
+
+    def test_should_not_add_terrain_or_seed_to_other_templates(self):
+        self.assertEqual(run_js("const s=E.defaultSpec('catcher');s.world.terrain='snow';out(Object.keys(E.clientValidate(s).spec.world))"), ["bg", "theme"])
 
     def test_should_return_a_fresh_copy_each_time(self):
         self.assertTrue(run_js("const a=E.defaultSpec('catcher');a.title='x';out(E.defaultSpec('catcher').title!=='x')"))
@@ -296,7 +311,7 @@ class PlayTests(unittest.TestCase):
         self.assertEqual(r, [[1, 0], [1, 0], 1])
 
     def test_should_report_progress_between_0_and_1(self):
-        r = run_js("""let ok=true;for(const t of E.TEMPLATES){let s=E.create(E.defaultSpec(t),2);for(let i=0;i<200;i++){s=E.step(s,BOTS[t+'Win'](s,i),16);if(!(s.progress>=0&&s.progress<=1))ok=false}}out(ok)""")
+        r = run_js("""let ok=true;for(const t of ['catcher','runner','maze','shooter','quiz']){let s=E.create(E.defaultSpec(t),2);for(let i=0;i<200;i++){s=E.step(s,BOTS[t+'Win'](s,i),16);if(!(s.progress>=0&&s.progress<=1))ok=false}}out(ok)""")
         self.assertTrue(r)
 
 
