@@ -879,11 +879,11 @@ function AppShell({ theme, renderVideo }) {
             <iframe key={viewKey} title="Users and credits" src="/admin?embed=1" allow="clipboard-write" style={{ width: '100%', height: '100%', border: 0, display: 'block' }} />
           </div>
         )}
-        {locked && (mode === 'chat' || mode === 'image' || mode === 'video') && <LockedPane theme={theme} menuVisible={!open || narrow} onLibrary={() => setMode('library')} />}
-        {mode === 'lab' && <PromptLabPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
-        {mode === 'aix' && <AIExplorersPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
-        {mode === 'blocks' && <AIExplorersPane key={'blocks' + viewKey} launch="blocks" theme={theme} menuVisible={!open || narrow} />}
-        {mode === 'examples' && <ExamplesPane key={viewKey} theme={theme} onUseScript={useScript} menuVisible={!open || narrow} />}
+        {locked && ['chat', 'image', 'video', 'lab', 'aix', 'blocks', 'examples'].includes(mode) && <LockedPane theme={theme} menuVisible={!open || narrow} onLibrary={() => setMode('library')} />}
+        {!locked && mode === 'lab' && <PromptLabPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
+        {!locked && mode === 'aix' && <AIExplorersPane key={viewKey} theme={theme} menuVisible={!open || narrow} />}
+        {!locked && mode === 'blocks' && <AIExplorersPane key={'blocks' + viewKey} launch="blocks" theme={theme} menuVisible={!open || narrow} />}
+        {!locked && mode === 'examples' && <ExamplesPane key={viewKey} theme={theme} onUseScript={useScript} menuVisible={!open || narrow} />}
         {mode === 'library' && <LibraryPane key={viewKey} theme={theme} onUseImage={useImage} toast={toast} menuVisible={!open || narrow} />}
         {isConv && !locked && <ConversationView key={mode + viewKey} theme={theme} kind={mode} user={user}
               models={models ? (models.error ? { error: true } : models[mode]) : null} conv={conv} convId={convId} upsert={upsertActive}
